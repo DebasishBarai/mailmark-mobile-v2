@@ -1,10 +1,11 @@
 {
-  "name": "mailmark",
+  "name": "mailmark-mobile",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
     "@expo/ui": "~57.0.12",
     "expo": "~57.0.15",
+    "expo-clipboard": "~57.0.1",
     "expo-constants": "~57.0.13",
     "expo-device": "~57.0.1",
     "expo-font": "~57.0.1",
@@ -24,6 +25,7 @@
     "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
+    "react-native-svg": "15.15.4",
     "react-native-web": "~0.21.0",
     "react-native-worklets": "0.10.1"
   },
@@ -33,11 +35,11 @@
   },
   "scripts": {
     "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "typecheck": "tsc --noEmit"
   },
   "private": true
 }

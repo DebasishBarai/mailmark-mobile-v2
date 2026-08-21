@@ -1,56 +1,70 @@
-# Welcome to your Expo app 👋
+# Mailmark for mobile
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A native mobile version of [mailmark.dev](https://www.mailmark.dev) — one email platform for every
+product you ship. Built with Expo SDK 57, Expo Router and React Native 0.86.
 
-## Get started
+The app has two halves:
 
-1. Install dependencies
+- **Marketing** (signed out) — the mailmark.dev landing page rebuilt natively: hero and inbox
+  still-life, the interactive cost calculator, the four-step setup walkthrough, the SDK block,
+  the feature grid, testimonials, pricing and the FAQ.
+- **Workspace** (signed in) — the product itself across four native tabs: Mail, Campaigns, Domains
+  and Settings.
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Getting started
 
 ```bash
-npm run reset-project
+bun install
+bun start        # then press i / a, or scan the QR code
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Other entry points: `bun run ios`, `bun run android`, `bun run web`.
 
-### Other setup steps
+## Routes
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```
+src/app/
+  _layout.tsx               root stack — providers, fonts, Stack.Protected auth gate
+  (marketing)/index.tsx     landing page
+  sign-in.tsx               sign in / start a trial (modal)
+  compose.tsx               new message (modal)
+  new-campaign.tsx          new campaign (modal)
+  add-domain.tsx            add a product domain (modal)
+  (workspace)/
+    _layout.tsx             native tabs (JS tabs on web via _layout.web.tsx)
+    mail/                   unified inbox, folders, mailbox filter, thread view, reply
+    campaigns/              campaign list with live stats, detail with rates and sequence
+    domains/                domain list, DNS record status, warming ramp, API key
+    settings/               account, plan usage, appearance, links out to the web app
+```
 
-## Learn more
+## Design
 
-To learn more about developing your project with Expo, look at the following resources:
+Two palettes, chosen by the system appearance setting and defined in `src/constants/theme.ts`:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+| | Background | Surface | Accent | Text |
+| --- | --- | --- | --- | --- |
+| Clean White | `#ece7df` | `#fbf9f4` | `#ce3a1b` | `#16130f` |
+| Enterprise Dark | `#0f172a` | `#243044` | `#f0714f` | `#e2e8f0` |
 
-## Join the community
+Both come from the theme library on mailmark.dev. The dark palette keeps a lightened terracotta
+accent rather than the web theme's blue, so the brand colour survives the switch.
 
-Join our community of developers creating universal apps.
+Type is the site's: **Schibsted Grotesk** for UI, **Fraunces** for display headings and the
+wordmark, **DM Mono** for code and metrics. The files live in `assets/fonts` and load through
+`expo-font`.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Icons resolve per platform through `src/components/ui/icon.tsx` — SF Symbols on iOS, Material
+Symbols on Android and web, from a single named set.
+
+## Data
+
+The workspace runs on sample data in `src/data/mock.ts`, held in a context store
+(`src/store/workspace.tsx`) that supports the real interactions: reading and starring threads,
+replying, sending, adding a domain and re-checking its DNS, creating a campaign, signing out.
+Swapping in the live API means replacing that store's implementation — the screens read from its
+interface only.
+
+Marketing copy is transcribed in `src/constants/content.ts`, section numbering matching the rail on
+the website. The FAQ answers are the exception: the site renders them client-side, so they are
+written from facts stated elsewhere on the page.
