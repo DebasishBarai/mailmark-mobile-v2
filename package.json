@@ -39,7 +39,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "preview": "expo export --platform web --output-dir dist && node ./scripts/build-web-preview.mjs"
   },
   "private": true
 }

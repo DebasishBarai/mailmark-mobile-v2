@@ -9,6 +9,10 @@ dist/
 web-build/
 expo-env.d.ts
 
+# single-file web preview (scripts/build-web-preview.mjs)
+mailmark-preview.html
+mailmark-preview.fragment.html
+
 # Native
 .kotlin/
 *.orig.*

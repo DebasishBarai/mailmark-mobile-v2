@@ -20,6 +20,29 @@ bun start        # then press i / a, or scan the QR code
 
 Other entry points: `bun run ios`, `bun run android`, `bun run web`.
 
+## Single-file web preview
+
+`bun run preview` exports the web build and packs it into one self-contained
+HTML file, with every stylesheet, script, font and image inlined as a `data:`
+URI. It runs from disk or any static host — no server, no network — which makes
+it a way to hand someone a clickable build when they cannot run Expo Go.
+
+```bash
+bun run preview                                   # -> mailmark-preview.html
+node ./scripts/build-web-preview.mjs --fragment   # <body> contents only
+```
+
+`--fragment` is for embedding in a host page that supplies its own document
+skeleton. Both outputs are gitignored.
+
+Note that this is a preview of the **web** build: `expo-router`'s native tabs
+fall back to the JavaScript tab bar (see `src/app/(workspace)/_layout.web.tsx`),
+so it shows the layout and flows rather than the real native chrome. Use Expo Go
+for that.
+
+> Expo Snack cannot open this project. Snack supports SDK 50–54 and this app is
+> on SDK 57.
+
 ## Routes
 
 ```
