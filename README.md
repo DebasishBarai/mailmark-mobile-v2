@@ -41,21 +41,11 @@ bun start                                             # then open the dev build
 
 or build locally with `bunx expo run:ios` / `bunx expo run:android`.
 
-`.env.local` is gitignored, so EAS cloud builds never see it. Store the same
-values as EAS environment variables once (the `preview`/`production` profiles
-read the matching EAS environment, see `eas.json`):
-
-```bash
-for env in development preview production; do
-  bunx eas env:create --environment $env --visibility plaintext \
-    --name EXPO_PUBLIC_CONVEX_URL --value https://<your-deployment>.convex.cloud
-  bunx eas env:create --environment $env --visibility plaintext \
-    --name EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY --value pk_live_...
-done
-```
-
-`EXPO_PUBLIC_*` values are inlined into the JS bundle at build time, so a build
-made before they were set has to be rebuilt.
+`.env.local` is gitignored, so EAS cloud builds never see it. Instead, every
+build profile in `eas.json` sets `EXPO_PUBLIC_CONVEX_URL` and
+`EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` to the website's production values under
+`env`. Both are public (the website ships them in its JS bundle). They are
+inlined into the JS bundle at build time, so changing them means rebuilding.
 
 ### Backend
 
