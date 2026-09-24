@@ -1,0 +1,65 @@
+name: Build Android
+
+# Builds the `preview` APK on the GitHub runner with `eas build --local`, so it
+# uses GitHub Actions minutes instead of the EAS cloud build quota. The APK is
+# attached to the run as an artifact.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Android preview APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      # A React Native build needs 10+ GB; drop preinstalled toolchains we
+      # never use (the Android SDK is kept).
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift
+          df -h /
+
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Only compile native code for real phones (arm64). The user-level
+      # gradle.properties overrides the generated project's ABI list; delete
+      # this step to also build for 32-bit phones and x86 emulators.
+      - name: Limit native ABIs
+        run: |
+          mkdir -p ~/.gradle
+          echo "reactNativeArchitectures=arm64-v8a" >> ~/.gradle/gradle.properties
+
+      - name: Build APK
+        run: >
+          eas build --local --non-interactive
+          --platform android --profile preview
+          --output ${{ github.workspace }}/build/mailmark-${{ github.sha }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mailmark-android-${{ github.sha }}
+          path: build/*.apk
+          if-no-files-found: error

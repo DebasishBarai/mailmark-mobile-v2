@@ -47,6 +47,19 @@ build profile in `eas.json` sets `EXPO_PUBLIC_CONVEX_URL` and
 `env`. Both are public (the website ships them in its JS bundle). They are
 inlined into the JS bundle at build time, so changing them means rebuilding.
 
+### CI builds
+
+Every push to `main` runs two separate GitHub Actions workflows, each building
+on GitHub's runners with `eas build --local` (no EAS cloud build quota used):
+
+- `Build Android` — the `preview` APK (arm64 only), attached to the run.
+- `Build iOS` — a simulator build (`preview-simulator` profile), which needs no
+  Apple Developer account. For an installable `.ipa`, set up iOS credentials
+  with `eas credentials` and change `PROFILE` in the workflow to `preview`.
+
+Both need an `EXPO_TOKEN` repository secret (an access token from
+expo.dev → Account settings → Access tokens).
+
 ### Backend
 
 None. The app needs no backend or database changes: it calls only Convex
