@@ -24,7 +24,6 @@ export function useEmailActions() {
   const markAsRead = useMutation(api.emails.markAsRead);
   const markAsUnread = useMutation(api.emails.markAsUnread);
   const toggleStarMutation = useMutation(api.emails.toggleStar);
-  const deleteEmail = useMutation(api.emails.deleteEmail);
   const cancelScheduled = useMutation(api.emails.cancelScheduledEmail);
 
   const fail = useCallback(
@@ -67,28 +66,6 @@ export function useEmailActions() {
       }
     },
     [moveToFolder, toast, fail],
-  );
-
-  const deleteForever = useCallback(
-    (email: Email, onDone?: () => void) => {
-      Alert.alert('Delete permanently?', 'This message will be removed from Mailmark. This cannot be undone.', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteEmail({ emailId: email._id });
-              haptic('success');
-              onDone?.();
-            } catch (err) {
-              fail(err, 'Could not delete this message.');
-            }
-          },
-        },
-      ]);
-    },
-    [deleteEmail, fail],
   );
 
   const setRead = useCallback(
@@ -136,7 +113,7 @@ export function useEmailActions() {
   );
 
   const reply = useCallback((email: Email, mode: 'reply' | 'replyAll' | 'forward' = 'reply') => {
-    router.push({ pathname: '/compose', params: { mode, emailId: email._id, mailboxId: email.mailboxId } });
+    router.push({ pathname: '/compose', params: { mode, emailId: email._id, mailboxId: email.mailboxId, folder: email.folder } });
   }, []);
 
   const showMenu = useCallback(
@@ -171,14 +148,13 @@ export function useEmailActions() {
       });
       if (email.folder === 'trash') {
         options.push({ label: 'Move to Inbox', icon: 'inbox', onPress: () => restore(email) });
-        options.push({ label: 'Delete permanently', icon: 'trash', destructive: true, onPress: () => deleteForever(email) });
       } else if (email.folder !== 'outbox') {
         options.push({ label: 'Move to Trash', icon: 'trash', destructive: true, onPress: () => trash(email) });
       }
       sheet.show({ title: email.subject || '(no subject)', options });
     },
-    [sheet, cancelSchedule, reply, setRead, toggleStar, toast, restore, deleteForever, trash],
+    [sheet, cancelSchedule, reply, setRead, toggleStar, toast, restore, trash],
   );
 
-  return { trash, restore, deleteForever, setRead, toggleStar, cancelSchedule, reply, showMenu };
+  return { trash, restore, setRead, toggleStar, cancelSchedule, reply, showMenu };
 }

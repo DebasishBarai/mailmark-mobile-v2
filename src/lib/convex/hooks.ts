@@ -12,7 +12,6 @@
  */
 
 import {
-  useConvex,
   usePaginatedQuery_experimental,
   useQuery_experimental,
 } from 'convex/react';
@@ -20,10 +19,6 @@ import type { FunctionArgs, FunctionReference, FunctionReturnType } from 'convex
 import type { PaginatedQueryArgs, PaginatedQueryReference } from 'convex/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { api } from './api';
-import { isMissingFunctionError } from './errors';
-
-import type { MobileCapabilities } from './types';
 
 export type LiveQuery<T> =
   | { status: 'loading'; data: undefined; error: undefined }
@@ -95,41 +90,3 @@ export function useRefreshKey(settleMs = 600) {
 
   return { key, refreshing, refresh };
 }
-
-const NO_EXTENSION: MobileCapabilities = { version: 0, push: false, campaignRecipients: false };
-
-/**
- * Which parts of the optional mobile backend extension are deployed.
- *
- * Asked once with a one-shot query rather than a subscription, because a
- * subscription to a function that does not exist surfaces as an error on
- * every screen that mounts it. Absent extension => every capability false,
- * and the features that need it explain what is missing instead of failing.
- */
-export function useMobileCapabilities(): MobileCapabilities | undefined {
-  const convex = useConvex();
-  const [caps, setCaps] = useState<MobileCapabilities | undefined>(capabilitiesCache);
-
-  useEffect(() => {
-    if (capabilitiesCache) return;
-    let cancelled = false;
-    convex
-      .query(api.mobile.capabilities, {})
-      .then((value) => {
-        capabilitiesCache = value;
-        if (!cancelled) setCaps(value);
-      })
-      .catch((err) => {
-        const value = isMissingFunctionError(err) ? NO_EXTENSION : { ...NO_EXTENSION, version: -1 };
-        if (isMissingFunctionError(err)) capabilitiesCache = value;
-        if (!cancelled) setCaps(value);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [convex]);
-
-  return caps;
-}
-
-let capabilitiesCache: MobileCapabilities | undefined;

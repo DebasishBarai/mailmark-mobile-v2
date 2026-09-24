@@ -11,12 +11,13 @@ import { EmailBodyView } from '@/features/mail/email-body-view';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/convex/api';
 import { errorMessage } from '@/lib/convex/errors';
-import { useLivePaginated, useLiveQuery } from '@/lib/convex/hooks';
-import type { EnrollmentStatus, Id, Sequence, SequenceEnrollment } from '@/lib/convex/types';
+import { useLivePaginated } from '@/lib/convex/hooks';
+import type { EnrollmentStatus, Sequence, SequenceEnrollment } from '@/lib/convex/types';
 import { listDate, plural, shortDate } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 
 import { SEQUENCE_STATUS, followUpCount } from './sequence-card';
+import { useSequences } from './use-sequences';
 
 const ENROLLMENT_META: Record<EnrollmentStatus, { label: string; tone: 'success' | 'accent' | 'neutral' | 'danger' | 'info' }> = {
   active: { label: 'In progress', tone: 'info' },
@@ -41,11 +42,12 @@ function stepLabels(steps: Sequence['steps']): Record<number, string> {
 }
 
 export function SequenceScreen({ id }: { id: string }) {
-  const sequence = useLiveQuery(api.sequences.getById, { sequenceId: id as Id<'sequences'> });
-  if (sequence.status === 'loading') return <LoadingState />;
-  if (sequence.status === 'error') return <ErrorState error={sequence.error} />;
-  if (!sequence.data) return <ErrorState title="Sequence not found" error={new Error('It may have been removed.')} onRetry={() => router.back()} />;
-  return <SequenceDetail sequence={sequence.data} />;
+  const sequences = useSequences();
+  const sequence = sequences.data?.find((s) => s._id === id);
+  if (sequences.status === 'loading') return <LoadingState />;
+  if (sequences.status === 'error') return <ErrorState error={sequences.error} />;
+  if (!sequence) return <ErrorState title="Sequence not found" error={new Error('It may have been removed.')} onRetry={() => router.back()} />;
+  return <SequenceDetail sequence={sequence} />;
 }
 
 function SequenceDetail({ sequence }: { sequence: Sequence }) {

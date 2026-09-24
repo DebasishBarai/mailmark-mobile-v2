@@ -1,4 +1,4 @@
-import { useMutation } from 'convex/react';
+import { useConvex } from 'convex/react';
 import * as Notifications from 'expo-notifications';
 import { useEffect, useState } from 'react';
 import { Linking, Platform } from 'react-native';
@@ -6,130 +6,133 @@ import { Linking, Platform } from 'react-native';
 import { useToast } from '@/components/feedback/toast';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Group, ListRow, LoadingState, Screen } from '@/components/ui';
-import { api } from '@/lib/convex/api';
 import { errorMessage } from '@/lib/convex/errors';
-import { useLiveQuery } from '@/lib/convex/hooks';
-import type { NotificationPreferences } from '@/lib/convex/types';
+import { haptic } from '@/lib/haptics';
 
-import { CATEGORIES, CHANNELS, getPushToken } from './push';
-import { usePushRegistration, type RegisterResult } from './use-push-registration';
-
-const PREFS: { key: keyof NotificationPreferences; title: string; subtitle: string }[] = [
-  { key: 'newMail', title: 'New mail', subtitle: 'Every message that arrives in your mailboxes' },
-  { key: 'replies', title: 'Replies', subtitle: 'Someone replied to mail or a campaign you sent' },
-  { key: 'bounces', title: 'Bounces & delivery problems', subtitle: 'A message bounced, was marked as spam or was not sent' },
-  { key: 'campaigns', title: 'Campaigns', subtitle: 'Scheduled campaigns sent, follow-ups finished' },
-  { key: 'account', title: 'Account & billing', subtitle: 'Domain verified, plan limits, payment problems' },
-];
-
-const REASONS: Record<string, string> = {
-  denied: 'Notifications are turned off for Mailmark. Turn them on in Settings.',
-  simulator: 'Push notifications need a physical device.',
-  'no-project-id': 'This build has no EAS project ID, so it cannot receive push notifications. Run `eas init` and rebuild.',
-  web: 'Push notifications are available in the iOS and Android apps.',
-  error: 'Could not register this device for notifications.',
-};
+import { backgroundStatus, registerMailCheck, showNotifications, unregisterMailCheck } from './background-check';
+import { checkMail, convexQuery, loadNotifyPrefs, saveNotifyPrefs, type NotifyPreferences } from './mail-check';
+import { requestNotificationPermission } from './push';
 
 export function NotificationsScreen() {
   const toast = useToast();
-  const push = usePushRegistration();
-  const prefs = useLiveQuery(api.mobile.getNotificationPreferences, push.available ? {} : 'skip');
-  const setPrefs = useMutation(api.mobile.setNotificationPreferences);
+  const convex = useConvex();
+  const [prefs, setPrefs] = useState<NotifyPreferences | null>(null);
   const [permission, setPermission] = useState<string | null>(null);
-  const [state, setState] = useState<RegisterResult | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<'available' | 'restricted' | 'unavailable' | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
-    if (Platform.OS === 'web') return;
-    Notifications.getPermissionsAsync().then((p) => setPermission(p.status));
-    getPushToken(false).then(setState).catch(() => {});
+    loadNotifyPrefs().then(setPrefs);
+    backgroundStatus().then(setStatus);
+    if (Platform.OS !== 'web') Notifications.getPermissionsAsync().then((p) => setPermission(p.status));
   }, []);
 
-  if (!push.capabilitiesLoaded) return <LoadingState />;
+  if (!prefs || status === null) return <LoadingState />;
 
-  if (!push.available) {
+  if (Platform.OS === 'web') {
     return (
       <Screen>
         <Card>
-          <ThemedText type="subheading">Push notifications are not enabled on this Mailmark server</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            The backend needs the mobile extension (mobile.ts and pushNotifications.ts) to store device tokens and send notifications. Everything else in the app works without it.
+          <ThemedText type="body" themeColor="textSecondary">
+            Notifications are available in the iOS and Android apps.
           </ThemedText>
         </Card>
       </Screen>
     );
   }
 
-  const enable = async () => {
-    setBusy(true);
+  const save = async (next: NotifyPreferences) => {
+    setPrefs(next);
+    await saveNotifyPrefs(next);
+  };
+
+  const setEnabled = async (enabled: boolean) => {
+    setBusy('toggle');
     try {
-      const result = await push.enable(true);
-      if (result) setState(result);
-      const p = await Notifications.getPermissionsAsync();
-      setPermission(p.status);
-      if (result && !result.ok) {
-        toast.show({ message: result.message ?? REASONS[result.reason], tone: 'error' });
-        if (result.reason === 'denied') void Linking.openSettings();
-      } else if (result?.ok) {
-        toast.show({ message: 'Notifications are on', icon: 'bell' });
+      if (enabled) {
+        const granted = await requestNotificationPermission();
+        setPermission(granted ? 'granted' : 'denied');
+        if (!granted) {
+          toast.show({ message: 'Notifications are turned off for Mailmark in Settings.', tone: 'error' });
+          return;
+        }
+        const next = { ...prefs, enabled: true };
+        await save(next);
+        // Record what is already there, so only mail from now on is announced.
+        await checkMail(convexQuery(convex), { silent: true, prefs: next });
+        await registerMailCheck();
+        haptic('success');
+      } else {
+        await save({ ...prefs, enabled: false });
+        await unregisterMailCheck();
       }
     } catch (err) {
       toast.show({ message: errorMessage(err), tone: 'error' });
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
-  const test = async () => {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Test notification',
-        body: 'Tapping this opens Insights. This is how Mailmark notifications will look.',
-        data: { url: '/insights' },
-        categoryIdentifier: CATEGORIES.campaign,
-      },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 2, channelId: CHANNELS.account },
-    });
-    toast.show({ message: 'Sending a test in 2 seconds. Lock your phone to see it.', icon: 'bell' });
-  };
-
-  const current = prefs.data;
-  const update = async (key: keyof NotificationPreferences, value: boolean) => {
+  const checkNow = async () => {
+    setBusy('check');
     try {
-      await setPrefs({ [key]: value });
+      const list = await checkMail(convexQuery(convex), { silent: false, prefs });
+      await showNotifications(list);
+      toast.show({ message: list.length ? `${list.length} notification${list.length === 1 ? '' : 's'} sent` : 'Nothing new since the last check', icon: 'bell' });
     } catch (err) {
       toast.show({ message: errorMessage(err), tone: 'error' });
+    } finally {
+      setBusy(null);
     }
   };
-
-  const granted = permission === 'granted' && state?.ok !== false;
 
   return (
     <Screen>
-      {!granted ? (
+      <Group
+        title="Notifications"
+        footer="Mailmark checks your mailboxes in the background and notifies you about new mail and bounces. Your phone decides when these checks run (usually every 15 minutes or more, less often in Low Power Mode), so alerts are not instant.">
+        <ListRow
+          title="Background mail checks"
+          icon="bell"
+          disabled={busy === 'toggle' || status !== 'available'}
+          toggle={{ value: prefs.enabled && permission === 'granted', onChange: setEnabled, disabled: busy === 'toggle' || status !== 'available' }}
+        />
+      </Group>
+
+      {status !== 'available' ? (
         <Card>
-          <ThemedText type="subheading">Turn on notifications</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {state && !state.ok ? REASONS[state.reason] : 'Hear about replies, bounces and finished campaigns as they happen. Tapping a notification opens the message or campaign.'}
+          <ThemedText type="small" themeColor="warning">
+            Background activity is restricted for Mailmark. Turn on Background App Refresh (iOS) or remove battery restrictions (Android) to receive notifications.
           </ThemedText>
-          <Button title={permission === 'denied' ? 'Open Settings' : 'Enable notifications'} icon="bell" loading={busy} onPress={permission === 'denied' ? () => Linking.openSettings() : enable} />
+          <Button title="Open Settings" variant="secondary" size="sm" onPress={() => Linking.openSettings()} />
         </Card>
       ) : null}
 
-      <Group title="Notify me about" footer="These apply to every device signed in to your account.">
-        {PREFS.map((p) => (
-          <ListRow
-            key={p.key}
-            title={p.title}
-            subtitle={p.subtitle}
-            toggle={{ value: current ? current[p.key] : true, onChange: (v) => update(p.key, v), disabled: !current }}
-          />
-        ))}
+      {permission === 'denied' ? (
+        <Card>
+          <ThemedText type="small" themeColor="warning">
+            Notifications are turned off for Mailmark in your phone&apos;s settings.
+          </ThemedText>
+          <Button title="Open Settings" variant="secondary" size="sm" onPress={() => Linking.openSettings()} />
+        </Card>
+      ) : null}
+
+      <Group title="Notify me about">
+        <ListRow
+          title="New mail"
+          subtitle="Unread messages that arrive in any mailbox"
+          toggle={{ value: prefs.newMail, onChange: (v) => save({ ...prefs, newMail: v }), disabled: !prefs.enabled }}
+        />
+        <ListRow
+          title="Bounces & spam reports"
+          subtitle="Messages you sent in the last week that did not arrive"
+          toggle={{ value: prefs.bounces, onChange: (v) => save({ ...prefs, bounces: v }), disabled: !prefs.enabled }}
+        />
       </Group>
 
-      {granted ? (
-        <Group footer={Platform.OS === 'android' ? 'Sound and importance per type are in Android notification settings.' : undefined}>
-          <ListRow title="Send a test notification" icon="bell" onPress={test} />
+      {prefs.enabled && permission === 'granted' ? (
+        <Group footer="Checks now and shows anything new, the same way the background check does.">
+          <ListRow title={busy === 'check' ? 'Checking…' : 'Check now'} icon="refresh" disabled={busy !== null} onPress={checkNow} />
           <ListRow title="System notification settings" icon="settings" onPress={() => Linking.openSettings()} />
         </Group>
       ) : null}

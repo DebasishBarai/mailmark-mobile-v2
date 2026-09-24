@@ -17,7 +17,7 @@ Built with Expo SDK 57, Expo Router native tabs and React Native 0.86.
 - **More**: domains and DNS, mailboxes, warmup, domain health, contacts,
   unsubscribes, suppressions, API keys and an API playground, billing,
   notifications, security and appearance.
-- **Native**: push notifications with actions, deep links, app lock with Face
+- **Native**: new-mail and bounce notifications with actions, deep links, app lock with Face
   ID / fingerprint, share sheet, haptics, offline awareness.
 
 See [docs/FEATURE_MAP.md](docs/FEATURE_MAP.md) for how each website feature
@@ -43,15 +43,17 @@ or build locally with `bunx expo run:ios` / `bunx expo run:android`.
 
 ### Backend
 
-Everything except push notifications and complete stats for very large
-campaigns works against the current backend as is. To enable those, apply the
-additive patch in [`backend/`](backend/README.md) to the website repository.
+None. The app needs no backend or database changes: it calls only Convex
+functions the website already calls, with the same arguments (the list is in
+`src/lib/convex/api.ts`).
 
-### Push notifications
+### Notifications
 
-1. `bunx eas init` to create the EAS project (adds `extra.eas.projectId`).
-2. Apply the backend patch and deploy.
-3. Configure APNs / FCM credentials with `bunx eas credentials`.
+Mailmark has no server push, so the app checks for new mail and bounces with
+an OS-scheduled background task (expo-background-task) using the same queries
+the website uses, and shows local notifications. The OS decides when the check
+runs (about every 15 minutes at best on Android; iOS schedules it by usage), so
+notifications are timely but not instant. Turn them on in More → Notifications.
 
 ### Clerk
 

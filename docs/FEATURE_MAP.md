@@ -2,25 +2,29 @@
 
 Built from a read of the website repository (Next.js app in `app/(protected)`,
 Convex backend in `convex/`). "Backend" lists the Convex functions each
-feature uses; the app calls exactly these (typed in `src/lib/convex/api.ts`).
-"Change" is what the backend needed for mobile, if anything (all in
-`backend/mailmark-mobile-backend.patch`, see `backend/README.md`).
+feature uses (typed in `src/lib/convex/api.ts`).
+
+**No backend or database changes.** Every function the app calls is one the
+website's pages call, with the same arguments, and the app reads data the
+same way the website does (for example, mailboxes per domain with
+`mailboxes.listByDomain`, the open message from the folder list). The
+"Change" column is therefore "None" throughout.
 
 ## Mail
 
 | Feature | Website | Backend | Mobile | Change |
 | --- | --- | --- | --- | --- |
 | Folders (Inbox, Sent, Outbox, Drafts, Trash) | Mailbox page folder nav | `emails.listByFolderPaginated`, `emails.countUnreadByMailbox` | Mail tab: infinite list, folder + mailbox sheet from the title, unread badge on tab and app icon | None |
-| Multiple mailboxes | Sidebar per domain | `mailboxes.listForCurrentUser` | Mailbox sheet grouped by domain with unread counts; last choice remembered | None |
+| Multiple mailboxes | Sidebar per domain | `domains.listForCurrentUser`, `mailboxes.listByDomain` | Mailbox sheet grouped by domain with unread counts; last choice remembered | None |
 | Read / unread, star | Buttons in reader | `emails.markAsRead/markAsUnread/toggleStar/markAllAsRead` | Auto-read on open, swipe right to toggle, long-press menu, "Mark all read" | None |
-| Delete | Move to trash | `emails.moveToFolder`, `emails.deleteEmail` | Swipe to Trash with Undo toast; Trash: restore or delete permanently | None |
+| Delete | Move to trash | `emails.moveToFolder` | Swipe to Trash with Undo toast; restore from Trash (no permanent delete, as on the website) | None |
 | Archive | Not in Mailmark | — | Trash with undo instead (an extra folder would hide mail on the website) | — |
 | Search | Filter over loaded page | client-side | Native header search bar over loaded mail, with a hint to load more | None |
 | Display names | contacts + own mailbox names | `contacts.namesByEmails`, `mailboxes.displayNamesForCurrentUser` | Same precedence as web | None |
-| Reader, HTML | Sandboxed iframe | `ses.fetchEmailBody` | Auto-height WebView, scripts blocked by CSP, links to in-app browser, `mailto:` to compose, optional remote-image blocking, tracking pixel stripped on own mail | None |
+| Reader, HTML | Sandboxed iframe; message taken from the folder list | `emails.listByFolderPaginated`, `ses.fetchEmailBody` | Auto-height WebView, scripts blocked by CSP, links to in-app browser, `mailto:` to compose, optional remote-image blocking, tracking pixel stripped on own mail | None |
 | Attachments (read) | Download | `ses.getAttachment` | Saved to cache and opened in the share sheet (Files, Quick Look, other apps) | None |
 | Delivery tracking | Tick icons | fields on `emails` | Delivery timeline: sent → delivered → opened → clicked links → replied, or bounce/complaint/block detail | None |
-| Threads | Not on web | — | Conversation assembled from recent inbox+sent with the same subject and a shared participant | None (documented limitation) |
+| Threads | Not on web | `emails.listByFolderPaginated` | Conversation assembled from recent inbox+sent with the same subject and a shared participant | None (documented limitation) |
 | Compose, To/Cc/Bcc | Compose panel | `ses.sendEmail` | Token recipient fields, contact suggestions, verification verdicts on chips | None |
 | Plain / Markdown / HTML, preview | Yes | client (`marked`) | Same `buildBody` as web, rendered preview | None |
 | Signature | Mailbox signature | `mailboxes.updateSignature` | Toggle per message; Markdown editor with preview | None |
@@ -36,13 +40,13 @@ feature uses; the app calls exactly these (typed in `src/lib/convex/api.ts`).
 | Feature | Website | Backend | Mobile | Change |
 | --- | --- | --- | --- | --- |
 | Campaign list | Sent folder grouped by `batchId` | `emails.listByFolderPaginated` (sent + outbox, every mailbox) | Campaigns tab: cards with delivered/opened/clicked/replied rates, load older | None |
-| Campaign detail | Recipient list in reader | same, or `mobile.campaignRecipients` | Stat tiles, engagement funnel, recipient filters (opened, clicked, replied, pending, problems), link to follow-up sequence | Optional: `campaignRecipients` for complete large/old campaigns |
+| Campaign detail | Recipient list in reader | same | Stat tiles, engagement funnel, recipient filters (opened, clicked, replied, pending, problems), link to follow-up sequence; notes when older pages of a very large campaign are not loaded yet | None |
 | Create: CSV import, merge fields | Compose "campaign" mode | client (`parseCSV`, `resolveMergeFields`) | 4-step modal: Audience → Message → Follow-ups → Review | None |
 | Google Sheets import | `/api/fetch-csv` | website API route | Same route | None |
 | Multiple sending mailboxes | Mailbox chooser | — | Chooser in Audience step | None |
 | Send / schedule | Per-recipient loop with `batchId` | `ses.sendEmail` / `ses.scheduleEmail` | Same, 3 in parallel, progress, stop button, per-recipient failure report, screen kept awake | None |
 | Follow-up sequences | `createAndEnrollWithFirstSent` | `sequenceActions.*` | Created the same way; `{Field}` rewritten to the `{{key}}` form the sequence processor substitutes | None (web bug documented) |
-| Sequence management | Follow-ups folder | `sequenceActions.getById/listEnrollmentsPage/pause/resume/cancel/cancelEnrollment` | Sequence screen: steps, stats, pause/resume/stop, enrollments with swipe-to-stop | None |
+| Sequence management | Follow-ups folder | `sequenceActions.getByMailbox/listEnrollmentsPage/pause/resume/cancel/cancelEnrollment` | Sequence screen: steps, stats, pause/resume/stop, enrollments with swipe-to-stop | None |
 
 ## Sending infrastructure
 
@@ -51,8 +55,8 @@ feature uses; the app calls exactly these (typed in `src/lib/convex/api.ts`).
 | Domains list / add | Domains page, modal | `domains.listForCurrentUser`, `domainActions.add` | List with status; add (optionally on a BYO AWS account) | None |
 | DNS records & verification | Domain page | `domains.getById`, `domainActions.verifyDns`, `retryMailFromVerification` | Record cards with tap-to-copy host/value, current wrong value, "Check DNS now", MAIL FROM retry, zone file copy/share | None |
 | Remove domain | Button | `domainActions.remove` | Danger zone with confirmation | None |
-| Mailboxes | Domain page | `mailboxes.create/updateDisplayName/updateSignature/remove` | Mailboxes list, mailbox settings screen, new mailbox | None |
-| Warmup | Warming page | `warmupPool.*`, `warmingSchedules.listForCurrentUser` | Cards with health, inbox rate, daily progress, speed, pause/resume, recent placements | None |
+| Mailboxes | Domain page | `mailboxes.create/updateDisplayName/updateSignature` | Mailboxes list, mailbox settings screen, new mailbox | None |
+| Warmup | Warming page | `warmupPool.*` | Cards with health, inbox rate, daily progress, speed, pause/resume, recent placements | None |
 | Domain health | Domain Health page | `domainHealthQueries.latestForCurrentUser` | Score, SPF/DKIM/DMARC/blocklist checks, bounce and complaint rates against AWS limits | None |
 | BYO AWS | Settings | `awsAccounts.listForCurrentUser/remove` | List, disconnect; connecting (CloudFormation) handed to the website | None |
 
@@ -95,9 +99,9 @@ feature uses; the app calls exactly these (typed in `src/lib/convex/api.ts`).
 
 | Feature | Implementation | Change |
 | --- | --- | --- |
-| Push notifications (new mail, replies, bounces, campaign sent, domain verified) | `expo-notifications`, Android channels, actionable categories (Reply, Mark as read, View campaign) | Yes: `mobile.ts`, `pushNotifications.ts`, 4 small hooks |
-| Notification preferences | Settings → Notifications | Yes (`notificationPreferences` table) |
-| Deep links | `mailmark://email|thread|campaign|sequence|mailbox|domain/{id}`, website URLs via `+native-intent.tsx` | Optional: AASA / assetlinks on the website |
+| Notifications (new mail, bounces and spam reports) | OS-scheduled background check (expo-background-task) with the website's queries, local notifications with Reply / Mark as read / View campaign actions; not instant | None |
+| Notification preferences | Stored on the device | None |
+| Deep links | `mailmark://email/{id}?mailbox=&folder=`, `thread`, `campaign`, `sequence`, `mailbox`, `domain`; website URLs via `+native-intent.tsx` | None (universal links additionally need AASA / assetlinks files on the website) |
 | App lock | Face ID / Touch ID / fingerprint / passcode on launch and resume | None |
 | Haptics, share sheet, clipboard | Throughout | None |
 | Offline banner, queued mutations | Convex connection state | None |

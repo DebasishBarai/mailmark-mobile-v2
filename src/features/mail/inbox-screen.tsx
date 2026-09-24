@@ -30,6 +30,7 @@ import { haptic } from '@/lib/haptics';
 import { BatchRow } from './batch-row';
 import { EmailRow } from './email-row';
 import { FOLDERS, folderLabel, type MailFolder } from './folders';
+import { emailHref } from './use-email';
 import { useEmailActions } from './use-email-actions';
 import { useNameMaps } from './use-names';
 
@@ -258,9 +259,9 @@ function MailList({
   const openEmail = useCallback((email: Email) => {
     haptic('selection');
     if (email.folder === 'drafts') {
-      router.push({ pathname: '/compose', params: { mailboxId: email.mailboxId, fromEmailId: email._id } });
+      router.push({ pathname: '/compose', params: { mailboxId: email.mailboxId, fromEmailId: email._id, folder: 'drafts' } });
     } else {
-      router.push(`/email/${email._id}`);
+      router.push(emailHref(email));
     }
   }, []);
 
@@ -274,9 +275,7 @@ function MailList({
     const email = item.email;
     if (folder === 'trash') {
       return (
-        <SwipeRow
-          leading={{ label: 'Restore', icon: 'inbox', color: theme.info, onPress: () => actions.restore(email) }}
-          trailing={[{ label: 'Delete', icon: 'trash', color: theme.danger, onPress: () => actions.deleteForever(email) }]}>
+        <SwipeRow leading={{ label: 'Restore', icon: 'inbox', color: theme.info, onPress: () => actions.restore(email) }}>
           <EmailRow email={email} names={names} onPress={openEmail} onLongPress={actions.showMenu} />
         </SwipeRow>
       );

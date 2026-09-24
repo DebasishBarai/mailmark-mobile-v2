@@ -12,8 +12,9 @@
       convex/react + Clerk           convex/react + @clerk/expo
 ```
 
-The app holds no business logic of its own that the backend already has. It
-calls the same public Convex functions as the website, by name, through
+The app holds no business logic of its own that the backend already has, and
+needs no backend or database changes. It calls only public Convex functions
+the website's pages call, by name, through
 `makeFunctionReference` with hand-written types (`src/lib/convex/api.ts`,
 `src/lib/convex/types.ts`) because the generated `api` lives in the other
 repository. Client-side logic that the website also runs client-side (body
@@ -80,8 +81,12 @@ with the right screen underneath and a working back button.
 - Account-wide state (mailboxes, domains, selected mailbox and folder, unread
   counts) lives in `WorkspaceProvider`; the campaign index lives in a provider
   on the Campaigns stack.
-- `useMobileCapabilities` asks `mobile:capabilities` once; features that need
-  the backend extension are enabled only when it exists.
+- Data is read the way the website reads it: mailboxes per domain
+  (`mailboxes.listByDomain`), sequences per mailbox
+  (`sequenceActions.getByMailbox`), and the open message from its folder list
+  (`emails.listByFolderPaginated`, paging on until found, as the website's
+  mailbox page selects from its list). Links to a message therefore carry its
+  mailbox and folder.
 
 ## Auth
 
@@ -113,14 +118,19 @@ password, codes, MFA, passkeys, SSO) works without the app implementing each.
 
 ## Notifications and deep links
 
-- `NotificationObserver` configures the handler, Android channels and action
-  categories, keeps the device token registered (`usePushRegistration`),
-  routes taps and actions, and mirrors total unread onto the app icon badge.
-- Payloads carry an in-app path in `data.url`; only paths matching app routes
-  are followed (`safeAppPath`).
+- Mailmark has no server push, and the app adds none. Instead an
+  OS-scheduled background task (`features/notifications/background-check.ts`)
+  gets a Convex token from the stored Clerk session, reads the newest inbox and
+  sent mail of each mailbox with the website's queries, and raises local
+  notifications for unread mail and bounces newer than the last check
+  (`mail-check.ts`). The OS controls timing, so it is not instant.
+- While the app is open, `NotificationObserver` records what the user has seen
+  (so it is never announced later), routes taps and actions (Reply, Mark as
+  read), and mirrors total unread onto the app icon badge.
+- Notification data carries an in-app path in `data.url`; only paths matching
+  app routes are followed (`safeAppPath`).
 - `+native-intent.tsx` maps `mailmark://` links and website URLs
   (`/mailbox/{id}`, `/domains/{id}`, `/dashboard`, …) to screens.
-- Backend side: see `backend/README.md`.
 
 ## Design
 

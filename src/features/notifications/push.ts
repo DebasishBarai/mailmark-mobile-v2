@@ -1,19 +1,14 @@
-import Constants from 'expo-constants';
-import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-/**
- * The contract between the backend's notification sender
- * (backend/convex/pushNotifications.ts) and the app. The backend puts these
- * in the Expo push message's `data`, `channelId` and `categoryId`.
- */
+/** What the app puts in a notification's `data`, read back when it is tapped. */
 export type PushData = {
   /** App path to open, e.g. "/email/<id>" or "/campaign/<batchId>". */
   url?: string;
   type?: 'new_mail' | 'reply' | 'bounce' | 'delivery_issue' | 'campaign_completed' | 'campaign_error' | 'account' | 'billing';
   emailId?: string;
   mailboxId?: string;
+  folder?: string;
   batchId?: string;
 };
 
@@ -76,34 +71,13 @@ export async function configureNotifications() {
   ]);
 }
 
-export type RegisterResult =
-  | { ok: true; token: string }
-  | { ok: false; reason: 'denied' | 'simulator' | 'no-project-id' | 'web' | 'error'; message?: string };
-
-export function easProjectId(): string | undefined {
-  return Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-}
-
-/** Ask for permission (if `prompt`) and fetch this device's Expo push token. */
-export async function getPushToken(prompt: boolean): Promise<RegisterResult> {
-  if (Platform.OS === 'web') return { ok: false, reason: 'web' };
-  if (!Device.isDevice) return { ok: false, reason: 'simulator' };
+/** Ask for permission to show notifications. */
+export async function requestNotificationPermission(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
   await configureNotifications();
-
   let { status } = await Notifications.getPermissionsAsync();
-  if (status !== 'granted' && prompt) {
-    ({ status } = await Notifications.requestPermissionsAsync());
-  }
-  if (status !== 'granted') return { ok: false, reason: 'denied' };
-
-  const projectId = easProjectId();
-  if (!projectId) return { ok: false, reason: 'no-project-id' };
-  try {
-    const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
-    return { ok: true, token: data };
-  } catch (err) {
-    return { ok: false, reason: 'error', message: err instanceof Error ? err.message : String(err) };
-  }
+  if (status !== 'granted') ({ status } = await Notifications.requestPermissionsAsync());
+  return status === 'granted';
 }
 
 /** Only in-app paths are followed from a notification, never arbitrary URLs. */

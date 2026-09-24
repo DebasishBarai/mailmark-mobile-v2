@@ -1,18 +1,18 @@
 import { Stack, router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button, EmptyState, ErrorState, IconButton, ListSkeleton, LoadingState, Segmented } from '@/components/ui';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { api } from '@/lib/convex/api';
-import { useLiveQuery, useRefreshKey } from '@/lib/convex/hooks';
+import { useRefreshKey } from '@/lib/convex/hooks';
 import type { Sequence } from '@/lib/convex/types';
 
 import { CampaignCard } from './campaign-card';
 import { useCampaignIndex, type Campaign } from './campaign-index';
 import { SequenceCard } from './sequence-card';
+import { useSequences } from './use-sequences';
 
 type Tab = 'campaigns' | 'followups';
 
@@ -111,8 +111,8 @@ function CampaignList({ tab, onTab, refreshing, onRefresh }: ListProps) {
 
 function SequenceList({ tab, onTab, refreshing, onRefresh }: ListProps) {
   const theme = useTheme();
-  const sequences = useLiveQuery(api.sequences.listForCurrentUser, {});
-  const sorted = useMemo(() => [...(sequences.data ?? [])].sort((a, b) => b.createdAt - a.createdAt), [sequences.data]);
+  const sequences = useSequences();
+  const sorted = sequences.data ?? [];
 
   if (sequences.status === 'loading') {
     return (

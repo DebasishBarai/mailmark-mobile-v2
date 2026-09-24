@@ -4,10 +4,12 @@
  * The website imports these from `convex/_generated/api`; that module lives in
  * the website repository together with the backend, so the mobile app names
  * the same functions by path ("module:function") with `makeFunctionReference`
- * and states their argument and return types here. Nothing in this file adds
- * backend behaviour: every entry is an existing public query, mutation or
- * action, except the `mobile` block, which is the optional mobile extension in
- * `backend/convex/mobile.ts` (see backend/README.md).
+ * and states their argument and return types here.
+ *
+ * Rule: every entry is a public function the website itself calls, with the
+ * same arguments. The app adds no backend functions and needs no backend
+ * changes. Check a new entry against the website's app/ directory before
+ * adding it.
  */
 
 import { makeFunctionReference, type PaginationOptions, type PaginationResult } from 'convex/server';
@@ -19,7 +21,6 @@ import type {
   AwsAccount,
   Contact,
   Domain,
-  DomainHealthCheck,
   DomainHealthSummary,
   DomainVerificationResult,
   DomainWithRegion,
@@ -28,10 +29,7 @@ import type {
   EmailStats,
   Id,
   Mailbox,
-  MobileCapabilities,
-  NotificationPreferences,
   OutgoingAttachment,
-  PushPlatform,
   Recipient,
   Referral,
   SendBlock,
@@ -46,7 +44,6 @@ import type {
   UsageAndLimits,
   User,
   VerificationResult,
-  WarmingSchedule,
   WarmupEmail,
   WarmupMailbox,
   WarmupSpeed,
@@ -79,7 +76,6 @@ export const api = {
   },
 
   mailboxes: {
-    listForCurrentUser: query<Empty, Mailbox[]>('mailboxes:listForCurrentUser'),
     listByDomain: query<{ domainId: Id<'domains'> }, Mailbox[]>('mailboxes:listByDomain'),
     getById: query<{ mailboxId: Id<'mailboxes'> }, Mailbox | null>('mailboxes:getById'),
     displayNamesForCurrentUser: query<Empty, { email: string; name: string }[]>(
@@ -92,7 +88,6 @@ export const api = {
       'mailboxes:updateDisplayName',
     ),
     updateSignature: mutation<{ mailboxId: Id<'mailboxes'>; signature: string }>('mailboxes:updateSignature'),
-    remove: action<{ mailboxId: Id<'mailboxes'> }>('mailboxes:remove'),
   },
 
   emails: {
@@ -102,13 +97,11 @@ export const api = {
     >('emails:listByFolderPaginated'),
     countByFolder: query<{ mailboxId: Id<'mailboxes'>; folder: string }, number>('emails:countByFolder'),
     countUnreadByMailbox: query<{ mailboxId: Id<'mailboxes'> }, number>('emails:countUnreadByMailbox'),
-    getById: query<{ emailId: Id<'emails'> }, Email | null>('emails:getById'),
     markAsRead: mutation<{ emailId: Id<'emails'> }>('emails:markAsRead'),
     markAsUnread: mutation<{ emailId: Id<'emails'> }>('emails:markAsUnread'),
     markAllAsRead: mutation<{ mailboxId: Id<'mailboxes'> }>('emails:markAllAsRead'),
     toggleStar: mutation<{ emailId: Id<'emails'> }>('emails:toggleStar'),
     moveToFolder: mutation<{ emailId: Id<'emails'>; folder: string }>('emails:moveToFolder'),
-    deleteEmail: mutation<{ emailId: Id<'emails'> }>('emails:deleteEmail'),
     cancelScheduledEmail: mutation<{ emailId: Id<'emails'> }>('emails:cancelScheduledEmail'),
   },
 
@@ -157,8 +150,6 @@ export const api = {
   },
 
   sequences: {
-    listForCurrentUser: query<Empty, Sequence[]>('sequenceActions:listForCurrentUser'),
-    getById: query<{ sequenceId: Id<'sequences'> }, Sequence | null>('sequenceActions:getById'),
     getByMailbox: query<{ mailboxId: Id<'mailboxes'> }, Sequence[]>('sequenceActions:getByMailbox'),
     listEnrollmentsPage: query<
       Paginated<{ sequenceId: Id<'sequences'> }>,
@@ -195,7 +186,6 @@ export const api = {
 
   domainHealth: {
     latestForCurrentUser: query<Empty, DomainHealthSummary[]>('domainHealthQueries:latestForCurrentUser'),
-    listForDomain: query<{ domainId: Id<'domains'> }, DomainHealthCheck[]>('domainHealthQueries:listForDomain'),
   },
 
   warmup: {
@@ -211,10 +201,6 @@ export const api = {
     getRecentWarmupEmails: query<{ warmupMailboxId: Id<'warmupMailboxes'>; limit?: number }, WarmupEmail[]>(
       'warmupPool:getRecentWarmupEmails',
     ),
-  },
-
-  warmingSchedules: {
-    listForCurrentUser: query<Empty, WarmingSchedule[]>('warmingSchedules:listForCurrentUser'),
   },
 
   emailStats: {
@@ -285,19 +271,5 @@ export const api = {
       { name: string; email: string; subject: string; message: string },
       { ok: boolean }
     >('supportRequests:submit'),
-  },
-
-  /** Optional mobile extension. See backend/README.md. */
-  mobile: {
-    capabilities: query<Empty, MobileCapabilities>('mobile:capabilities'),
-    registerPushToken: mutation<{ token: string; platform: PushPlatform; deviceName?: string }>(
-      'mobile:registerPushToken',
-    ),
-    unregisterPushToken: mutation<{ token: string }>('mobile:unregisterPushToken'),
-    getNotificationPreferences: query<Empty, NotificationPreferences | null>('mobile:getNotificationPreferences'),
-    setNotificationPreferences: mutation<Partial<NotificationPreferences>>('mobile:setNotificationPreferences'),
-    campaignRecipients: query<Paginated<{ batchId: string }>, PaginationResult<Email>>(
-      'mobile:campaignRecipients',
-    ),
   },
 } as const;

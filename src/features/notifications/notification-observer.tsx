@@ -1,21 +1,24 @@
-import { useMutation } from 'convex/react';
+import { useConvex, useMutation } from 'convex/react';
 import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import { useSession } from '@/features/auth/session';
 import { useWorkspace } from '@/features/workspace/workspace';
 import { api } from '@/lib/convex/api';
 import type { Id } from '@/lib/convex/types';
 
+// Importing this module defines the background task at startup, which the
+// OS requires before it can run it.
+import { unregisterMailCheck } from './background-check';
+import { checkMail, clearNotifyState, convexQuery, loadNotifyPrefs } from './mail-check';
 import { ACTIONS, configureNotifications, safeAppPath, type PushData } from './push';
-import { usePushRegistration } from './use-push-registration';
 
 /**
- * Routes notification taps and actions into the app, keeps the push token
- * registered, and mirrors the unread count onto the app icon badge.
- * Renders nothing.
+ * Routes notification taps and actions into the app, keeps the background
+ * check's "seen" marker current while the app is open, and mirrors the
+ * unread count onto the app icon badge. Renders nothing.
  */
 export function NotificationObserver() {
   if (Platform.OS === 'web') return null;
@@ -23,15 +26,40 @@ export function NotificationObserver() {
 }
 
 function Observer() {
-  const { isAuthenticated } = useSession();
+  const convex = useConvex();
+  const { isAuthenticated, registerSignOutHook } = useSession();
   const { totalUnread } = useWorkspace();
   const markAsRead = useMutation(api.emails.markAsRead);
   const handledInitial = useRef(false);
-  usePushRegistration();
 
   useEffect(() => {
     void configureNotifications();
   }, []);
+
+  useEffect(
+    () =>
+      registerSignOutHook(async () => {
+        await unregisterMailCheck();
+        await clearNotifyState();
+        await Notifications.setBadgeCountAsync(0);
+      }),
+    [registerSignOutHook],
+  );
+
+  // Whatever is on screen when the app is left counts as seen, so the next
+  // background check only announces mail that arrives after that.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const sync = async () => {
+      const prefs = await loadNotifyPrefs();
+      if (prefs.enabled) await checkMail(convexQuery(convex), { silent: true, prefs }).catch(() => {});
+    };
+    void sync();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background' || state === 'active') void sync();
+    });
+    return () => sub.remove();
+  }, [isAuthenticated, convex]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -46,10 +74,13 @@ function Observer() {
         return;
       }
       if (action === ACTIONS.reply && data.emailId) {
-        router.push({ pathname: '/compose', params: { mode: 'reply', emailId: data.emailId, ...(data.mailboxId ? { mailboxId: data.mailboxId } : {}) } });
+        router.push({
+          pathname: '/compose',
+          params: { mode: 'reply', emailId: data.emailId, ...(data.mailboxId ? { mailboxId: data.mailboxId } : {}), ...(data.folder ? { folder: data.folder } : {}) },
+        });
         return;
       }
-      const path = safeAppPath(data.url) ?? (data.emailId ? `/email/${data.emailId}` : data.batchId ? `/campaign/${encodeURIComponent(data.batchId)}` : null);
+      const path = safeAppPath(data.url);
       if (path) router.push(path as never);
     };
 

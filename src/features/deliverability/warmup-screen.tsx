@@ -7,7 +7,7 @@ import { StyleSheet, View } from 'react-native';
 import { useActionSheet } from '@/components/feedback/action-sheet';
 import { useToast } from '@/components/feedback/toast';
 import { ThemedText } from '@/components/themed-text';
-import { Badge, Button, Card, EmptyState, ErrorState, Group, ListRow, ListSkeleton, ProgressBar, Screen, Segmented } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, ListSkeleton, ProgressBar, Screen, Segmented } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useWorkspace } from '@/features/workspace/workspace';
 import { useTheme } from '@/hooks/use-theme';
@@ -30,7 +30,6 @@ export function WarmupScreen() {
   const toast = useToast();
   const { mailboxes, domainFor } = useWorkspace();
   const warmups = useLiveQuery(api.warmup.listForCurrentUser, {});
-  const schedules = useLiveQuery(api.warmingSchedules.listForCurrentUser, {});
   const start = useMutation(api.warmup.startWarmup);
 
   if (warmups.status === 'loading') return <ListSkeleton avatar={false} />;
@@ -79,19 +78,6 @@ export function WarmupScreen() {
         </>
       )}
 
-      {(schedules.data ?? []).length > 0 ? (
-        <Group title="Sending ramps" footer="A ramp caps how much a new domain sends per day while its reputation builds.">
-          {schedules.data!.map((s) => (
-            <ListRow
-              key={s._id}
-              title={s.domainName}
-              subtitle={`Day ${s.currentDay} of ${s.totalDays} · ${s.sentToday}/${s.dailyLimit} sent today`}
-              icon="chart"
-              right={<Badge label={s.status} tone={s.status === 'active' ? 'success' : s.status === 'paused' ? 'warning' : 'neutral'} />}
-            />
-          ))}
-        </Group>
-      ) : null}
 
       <Button title="How warmup works" variant="ghost" icon="docs" onPress={() => WebBrowser.openBrowserAsync(WebLinks.warmupDocs)} />
     </Screen>

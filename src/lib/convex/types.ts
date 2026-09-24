@@ -275,19 +275,6 @@ export type WarmupMailbox = SystemFields<'warmupMailboxes'> & {
   domainName: string;
 };
 
-export type WarmingSchedule = SystemFields<'warmingSchedules'> & {
-  domainId: Id<'domains'>;
-  mailboxId: Id<'mailboxes'>;
-  status: 'active' | 'paused' | 'completed';
-  currentDay: number;
-  totalDays: number;
-  dailyLimit: number;
-  sentToday: number;
-  startedAt: number;
-  domainName: string;
-  mailboxAddress: string;
-};
-
 export type WarmupEmail = SystemFields<'warmupEmails'> & {
   direction: 'outbound' | 'inbound';
   fromAddress: string;
@@ -387,22 +374,4 @@ export type DomainVerificationResult = {
   sesDkimStatus?: string;
   sesMailFromStatus?: string;
   error?: string;
-};
-
-// ── Mobile backend extension (backend/convex/mobile.ts) ────────────────────
-
-export type PushPlatform = 'ios' | 'android';
-
-export type NotificationPreferences = {
-  newMail: boolean;
-  replies: boolean;
-  bounces: boolean;
-  campaigns: boolean;
-  account: boolean;
-};
-
-export type MobileCapabilities = {
-  version: number;
-  push: boolean;
-  campaignRecipients: boolean;
 };

@@ -12,6 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Button, Chip, Icon, IconButton, LoadingState } from '@/components/ui';
 import { Fonts, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { EmailBodyView } from '@/features/mail/email-body-view';
+import { useEmail } from '@/features/mail/use-email';
 import { useEmailBody } from '@/features/mail/use-email-body';
 import { usePreferences } from '@/features/settings/preferences';
 import { useWorkspace } from '@/features/workspace/workspace';
@@ -47,6 +48,8 @@ type Params = {
   emailId?: string;
   draftId?: string;
   fromEmailId?: string;
+  /** Folder of the source message, so it can be found in its folder list. */
+  folder?: string;
   to?: string;
   subject?: string;
 };
@@ -54,8 +57,8 @@ type Params = {
 export function ComposeScreen() {
   const params = useLocalSearchParams<Params>();
   const { mailboxes, mailbox: current } = useWorkspace();
-  const sourceId = (params.emailId ?? params.fromEmailId) as Id<'emails'> | undefined;
-  const source = useLiveQuery(api.emails.getById, sourceId ? { emailId: sourceId } : 'skip');
+  const sourceId = params.emailId ?? params.fromEmailId;
+  const source = useEmail(sourceId ?? '', { mailboxId: params.mailboxId, folder: params.folder ?? (params.fromEmailId ? 'drafts' : undefined) });
   const sourceBody = useEmailBody(sourceId ? source.data : undefined);
 
   if (mailboxes.status === 'loading' || (sourceId && (source.status === 'loading' || (source.data && sourceBody.status === 'loading')))) {
@@ -120,7 +123,7 @@ function Composer({
   const sendEmail = useAction(api.ses.sendEmail);
   const scheduleEmail = useAction(api.ses.scheduleEmail);
   const verify = useAction(api.verification.verifyForCurrentUser);
-  const deleteServerDraft = useMutation(api.emails.deleteEmail);
+  const moveToFolder = useMutation(api.emails.moveToFolder);
   const suggestions = useContactSuggestions(true);
   const { prefs } = usePreferences();
 
@@ -236,7 +239,8 @@ function Composer({
   const finish = (message: string) => {
     sent.current = true;
     draftStore.remove(draftId.current);
-    if (serverDraftId) deleteServerDraft({ emailId: serverDraftId }).catch(() => {});
+    // A draft that has been sent goes to Trash, the only removal the website offers.
+    if (serverDraftId) moveToFolder({ emailId: serverDraftId, folder: 'trash' }).catch(() => {});
     haptic('success');
     toast.show({ message, icon: 'send', tone: 'success' });
     router.back();

@@ -12,6 +12,8 @@ import type { Email } from '@/lib/convex/types';
 import { displayName, normalizeSubject, rawEmail, type NameMaps } from '@/lib/email/address';
 import { listDate } from '@/lib/format';
 
+import { emailHref } from './use-email';
+
 const WINDOW = 100;
 
 /**
@@ -69,7 +71,7 @@ export function ConversationList({ current, messages, loading, names }: { curren
             accessibilityRole="button"
             disabled={isCurrent}
             accessibilityLabel={`${outgoing ? 'You' : displayName(m.from, names)}, ${listDate(m.date)}`}
-            onPress={() => router.push(`/email/${m._id}`)}
+            onPress={() => router.push(emailHref(m))}
             style={({ pressed }) => [
               styles.item,
               {

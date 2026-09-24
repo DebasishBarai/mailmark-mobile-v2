@@ -1,7 +1,7 @@
-import { useAction, useMutation } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { Stack, router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useActionSheet } from '@/components/feedback/action-sheet';
 import { useToast } from '@/components/feedback/toast';
@@ -31,7 +31,6 @@ function Settings({ mailbox }: { mailbox: Mailbox }) {
   const sheet = useActionSheet();
   const { selectMailbox, setFolder, domainFor, unreadByMailbox } = useWorkspace();
   const updateName = useMutation(api.mailboxes.updateDisplayName);
-  const remove = useAction(api.mailboxes.remove);
   const startWarmup = useMutation(api.warmup.startWarmup);
   const groups = useLiveQuery(api.senderGroups.list, { mailboxId: mailbox._id });
   const sequences = useLiveQuery(api.sequences.getByMailbox, { mailboxId: mailbox._id });
@@ -39,7 +38,6 @@ function Settings({ mailbox }: { mailbox: Mailbox }) {
   const [draftName, setName] = useState<string | null>(null);
   const name = draftName ?? mailbox.displayName ?? '';
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   const domain = domainFor(mailbox);
   const warmup = warmups.data?.find((w) => w.mailboxId === mailbox._id);
@@ -84,25 +82,6 @@ function Settings({ mailbox }: { mailbox: Mailbox }) {
       })),
     });
 
-  const confirmDelete = () =>
-    Alert.alert(`Delete ${mailbox.fullAddress}?`, 'Every message in this mailbox is deleted, from Mailmark and from storage. This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete mailbox',
-        style: 'destructive',
-        onPress: async () => {
-          setDeleting(true);
-          try {
-            await remove({ mailboxId: mailbox._id });
-            haptic('success');
-            router.back();
-          } catch (err) {
-            toast.show({ message: errorMessage(err), tone: 'error' });
-            setDeleting(false);
-          }
-        },
-      },
-    ]);
 
   return (
     <Screen>
@@ -182,9 +161,6 @@ function Settings({ mailbox }: { mailbox: Mailbox }) {
         </Group>
       ) : null}
 
-      <Group title="Danger zone">
-        <ListRow title="Delete mailbox" icon="trash" destructive disabled={deleting} onPress={confirmDelete} showChevron={false} />
-      </Group>
     </Screen>
   );
 }

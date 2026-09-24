@@ -6,10 +6,9 @@ import { ThemedText } from '@/components/themed-text';
 import { Badge, Button, Card, EmptyState, ErrorState, Icon, LoadingState, Segmented } from '@/components/ui';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { DELIVERY_META, deliveryState, useToneColor } from '@/features/mail/delivery-status';
+import { emailHref } from '@/features/mail/use-email';
 import { useWorkspace } from '@/features/workspace/workspace';
 import { useTheme } from '@/hooks/use-theme';
-import { api } from '@/lib/convex/api';
-import { useLiveQuery } from '@/lib/convex/hooks';
 import type { Email } from '@/lib/convex/types';
 import { rawEmail } from '@/lib/email/address';
 import { fullDate, listDate, plural } from '@/lib/format';
@@ -17,6 +16,7 @@ import { fullDate, listDate, plural } from '@/lib/format';
 import { SEQUENCE_STATUS } from './sequence-card';
 import { campaignStats, matchesFilter, rate, type RecipientFilter } from './stats';
 import { useCampaignRecipients } from './use-campaign-recipients';
+import { useSequences } from './use-sequences';
 
 const FILTERS: { value: RecipientFilter; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -32,7 +32,7 @@ export function CampaignScreen({ batchId }: { batchId: string }) {
   const recipients = useCampaignRecipients(batchId);
   const { mailboxes } = useWorkspace();
   const [filter, setFilter] = useState<RecipientFilter>('all');
-  const sequences = useLiveQuery(api.sequences.listForCurrentUser, {});
+  const sequences = useSequences();
 
   const emails = recipients.emails;
   const first = emails[0];
@@ -119,9 +119,7 @@ export function CampaignScreen({ batchId }: { batchId: string }) {
 
       {!recipients.complete ? (
         <ThemedText type="caption" themeColor="textMuted">
-          {recipients.source === 'recent'
-            ? `Figures cover the ${plural(emails.length, 'recipient')} found in your recent sent mail. Older parts of a very large campaign may not be loaded yet.`
-            : 'Loading every recipient…'}
+          Figures cover the {plural(emails.length, 'recipient')} found in the sent mail loaded so far. Load older campaigns on the Campaigns screen to include the rest of a very large send.
         </ThemedText>
       ) : null}
 
@@ -201,7 +199,7 @@ function RecipientRow({ email }: { email: Email }) {
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={() => router.push(`/email/${email._id}`)}
+      onPress={() => router.push(emailHref(email))}
       style={({ pressed }) => [styles.recipient, pressed && { backgroundColor: theme.backgroundSelected }]}>
       <View style={styles.flex}>
         <ThemedText type="body" numberOfLines={1}>

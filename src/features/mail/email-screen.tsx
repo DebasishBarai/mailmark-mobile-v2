@@ -10,8 +10,8 @@ import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { usePreferences } from '@/features/settings/preferences';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/convex/api';
-import { useLiveQuery, useRefreshKey } from '@/lib/convex/hooks';
-import type { Email, Id } from '@/lib/convex/types';
+import { useRefreshKey } from '@/lib/convex/hooks';
+import type { Email } from '@/lib/convex/types';
 import { displayName, rawEmail, type NameMaps } from '@/lib/email/address';
 import { htmlToText } from '@/lib/email/compose';
 import { fullDate, timeUntil } from '@/lib/format';
@@ -23,16 +23,17 @@ import { DeliveryPanel } from './delivery-panel';
 import { EmailBodyView } from './email-body-view';
 import { folderLabel } from './folders';
 import { useEmailActions } from './use-email-actions';
+import { useEmail, type EmailLocation } from './use-email';
 import { useEmailBody } from './use-email-body';
 import { useNameMaps } from './use-names';
 
-export function EmailScreen({ id }: { id: string }) {
+export function EmailScreen({ id, location }: { id: string; location: EmailLocation }) {
   const { key, refresh } = useRefreshKey();
-  return <EmailScreenBody key={key} id={id as Id<'emails'>} onRetry={refresh} />;
+  return <EmailScreenBody key={key} id={id} location={location} onRetry={refresh} />;
 }
 
-function EmailScreenBody({ id, onRetry }: { id: Id<'emails'>; onRetry: () => void }) {
-  const email = useLiveQuery(api.emails.getById, { emailId: id });
+function EmailScreenBody({ id, location, onRetry }: { id: string; location: EmailLocation; onRetry: () => void }) {
+  const email = useEmail(id, location);
 
   if (email.status === 'loading') return <LoadingState />;
   if (email.status === 'error') return <ErrorState error={email.error} onRetry={onRetry} />;
@@ -40,7 +41,7 @@ function EmailScreenBody({ id, onRetry }: { id: Id<'emails'>; onRetry: () => voi
     return (
       <ErrorState
         title="Message not found"
-        error={new Error('It may have been deleted, or it belongs to a mailbox on another account.')}
+        error={new Error('It may have been moved or deleted, or it is older than the most recent 500 messages in its folder.')}
         onRetry={() => router.back()}
       />
     );
@@ -92,12 +93,7 @@ function Reader({ email }: { email: Email }) {
                 <IconButton icon="reply" label="Reply" color={theme.accent} onPress={() => actions.reply(email, 'reply')} />
               ) : null}
               {email.folder === 'trash' ? (
-                <IconButton
-                  icon="trash"
-                  label="Delete permanently"
-                  color={theme.danger}
-                  onPress={() => actions.deleteForever(email, () => router.back())}
-                />
+                <IconButton icon="inbox" label="Move to Inbox" color={theme.accent} onPress={() => actions.restore(email)} />
               ) : email.folder !== 'outbox' ? (
                 <IconButton
                   icon="trash"
