@@ -37,6 +37,8 @@ export const Colors = {
     info: '#3a5f8a',
     infoSoft: '#d8e2ee',
     overlay: 'rgba(22, 19, 15, 0.45)',
+    chartSent: '#ce3a1b',
+    chartReceived: '#2f6db8',
   },
   dark: {
     background: '#0f172a',
@@ -63,6 +65,8 @@ export const Colors = {
     info: '#8fb4e0',
     infoSoft: '#1b2c42',
     overlay: 'rgba(2, 6, 23, 0.6)',
+    chartSent: '#e0603f',
+    chartReceived: '#4f8fd8',
   },
 } as const;
 

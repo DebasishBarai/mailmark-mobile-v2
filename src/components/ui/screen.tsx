@@ -1,33 +1,40 @@
 import type { ReactNode, Ref } from 'react';
-import { ScrollView, StyleSheet, View, type ScrollViewProps } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { RefreshControl, ScrollView, StyleSheet, View, type ScrollViewProps } from 'react-native';
 
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export type ScreenProps = {
   children: ReactNode;
-  /** Adds the bottom safe-area inset plus room for the tab bar. */
   scroll?: boolean;
   padded?: boolean;
+  /** Vertical gap between direct children. */
+  gap?: number;
+  refreshing?: boolean;
+  onRefresh?: () => void;
   contentContainerStyle?: ScrollViewProps['contentContainerStyle'];
   ref?: Ref<ScrollView>;
-} & Omit<ScrollViewProps, 'children' | 'contentContainerStyle' | 'ref'>;
+} & Omit<ScrollViewProps, 'children' | 'contentContainerStyle' | 'ref' | 'refreshControl'>;
 
+/**
+ * The scrolling body of a pushed screen. Content is capped to a readable
+ * width on tablets, the native header handles the top inset (automatic
+ * content insets), and the bottom gets room for the tab bar.
+ */
 export function Screen({
   children,
   scroll = true,
   padded = true,
+  gap = Spacing.five,
+  refreshing,
+  onRefresh,
   contentContainerStyle,
   ref,
   ...rest
 }: ScreenProps) {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
 
-  const content = (
-    <View style={[styles.inner, padded && styles.padded]}>{children}</View>
-  );
+  const content = <View style={[styles.inner, padded && styles.padded, { gap }]}>{children}</View>;
 
   if (!scroll) {
     return <View style={[styles.root, { backgroundColor: theme.background }]}>{content}</View>;
@@ -37,12 +44,15 @@ export function Screen({
     <ScrollView
       ref={ref}
       style={[styles.root, { backgroundColor: theme.background }]}
-      contentContainerStyle={[
-        styles.scrollContent,
-        { paddingBottom: insets.bottom + Spacing.eight + Spacing.five },
-        contentContainerStyle,
-      ]}
+      contentContainerStyle={[styles.scrollContent, contentContainerStyle]}
+      contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+      refreshControl={
+        onRefresh ? (
+          <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={theme.accent} colors={[theme.accent]} />
+        ) : undefined
+      }
       {...rest}>
       {content}
     </ScrollView>
@@ -56,11 +66,12 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     alignItems: 'center',
+    paddingTop: Spacing.three,
+    paddingBottom: Spacing.eight + Spacing.five,
   },
   inner: {
     width: '100%',
     maxWidth: MaxContentWidth,
-    flex: 1,
   },
   padded: {
     paddingHorizontal: Spacing.four,
