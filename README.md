@@ -41,6 +41,22 @@ bun start                                             # then open the dev build
 
 or build locally with `bunx expo run:ios` / `bunx expo run:android`.
 
+`.env.local` is gitignored, so EAS cloud builds never see it. Store the same
+values as EAS environment variables once (the `preview`/`production` profiles
+read the matching EAS environment, see `eas.json`):
+
+```bash
+for env in development preview production; do
+  bunx eas env:create --environment $env --visibility plaintext \
+    --name EXPO_PUBLIC_CONVEX_URL --value https://<your-deployment>.convex.cloud
+  bunx eas env:create --environment $env --visibility plaintext \
+    --name EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY --value pk_live_...
+done
+```
+
+`EXPO_PUBLIC_*` values are inlined into the JS bundle at build time, so a build
+made before they were set has to be rebuilt.
+
 ### Backend
 
 None. The app needs no backend or database changes: it calls only Convex
