@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Mailmark",
-    "slug": "mailmark",
+    "slug": "mailmark-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
