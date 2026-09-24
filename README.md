@@ -41,6 +41,12 @@ bun start                                             # then open the dev build
 
 or build locally with `bunx expo run:ios` / `bunx expo run:android`.
 
+`.env.local` is gitignored, so EAS cloud builds never see it. Instead, every
+build profile in `eas.json` sets `EXPO_PUBLIC_CONVEX_URL` and
+`EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` to the website's production values under
+`env`. Both are public (the website ships them in its JS bundle). They are
+inlined into the JS bundle at build time, so changing them means rebuilding.
+
 ### Backend
 
 None. The app needs no backend or database changes: it calls only Convex

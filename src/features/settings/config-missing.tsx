@@ -23,7 +23,8 @@ export function ConfigMissingScreen({ missing }: { missing: string[] }) {
       <ThemedText type="title">Connect this build to Mailmark</ThemedText>
       <ThemedText type="body" themeColor="textSecondary">
         The app talks to the same Convex deployment and Clerk instance as the website. Add these to a
-        .env.local file (see .env.example) and restart the bundler:
+        .env.local file (see .env.example) and restart the bundler. EAS builds don&apos;t read
+        .env.local: they take these from the build profile&apos;s env in eas.json.
       </ThemedText>
       <Card>
         <View style={styles.list}>
