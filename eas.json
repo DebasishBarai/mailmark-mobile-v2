@@ -23,6 +23,12 @@
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsubWFpbG1hcmsuZGV2JA"
       }
     },
+    "preview-simulator": {
+      "extends": "preview",
+      "ios": {
+        "simulator": true
+      }
+    },
     "production": {
       "environment": "production",
       "autoIncrement": true,
