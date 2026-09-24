@@ -7,17 +7,56 @@
     "icon": "./assets/images/icon.png",
     "scheme": "mailmark",
     "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "dev.mailmark.app",
+      "supportsTablet": true,
+      "associatedDomains": [
+        "applinks:www.mailmark.dev"
+      ],
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
     "android": {
+      "package": "dev.mailmark.app",
       "adaptiveIcon": {
         "backgroundColor": "#ece7df",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "softwareKeyboardLayoutMode": "resize",
+      "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "www.mailmark.dev",
+              "pathPrefix": "/mailbox"
+            },
+            {
+              "scheme": "https",
+              "host": "www.mailmark.dev",
+              "pathPrefix": "/domains"
+            },
+            {
+              "scheme": "https",
+              "host": "www.mailmark.dev",
+              "pathPrefix": "/dashboard"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -32,11 +71,46 @@
             "backgroundColor": "#0f172a"
           }
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-sharing",
+      [
+        "@clerk/expo",
+        {
+          "faceIDPermission": "Allow Mailmark to use Face ID to unlock the app."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#ce3a1b"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Mailmark to attach photos and videos to your emails.",
+          "cameraPermission": "Allow Mailmark to take photos to attach to your emails."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Mailmark to use Face ID to unlock the app."
+        }
+      ],
+      "expo-web-browser",
+      "expo-font",
+      "expo-image",
+      "expo-background-task"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {}
     }
   }
 }
