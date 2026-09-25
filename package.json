@@ -65,5 +65,8 @@
     "typecheck": "tsc --noEmit",
     "preview": "expo export --platform web --output-dir dist && node ./scripts/build-web-preview.mjs"
   },
-  "private": true
+  "private": true,
+  "patchedDependencies": {
+    "react-native-gesture-handler@2.32.0": "patches/react-native-gesture-handler@2.32.0.patch"
+  }
 }
