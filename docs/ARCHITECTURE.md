@@ -123,7 +123,12 @@ password, codes, MFA, passkeys, SSO) works without the app implementing each.
   `features/notifications/delivery.ts` registers this device's Expo push token
   and preferences with `pushTokens.register` on launch, on every preference
   change and when the token rolls, and unregisters on sign-out or when
-  notifications are turned off.
+  notifications are turned off. Unregistering uses
+  `pushTokens.unregisterDevice`, which needs no session, and is queued on the
+  device until it lands, so a sign-out made offline still stops pushes on the
+  next launch. The server also drops tokens not registered for 90 days.
+  Server calls wait at most 5 seconds, since offline the Convex client holds
+  a mutation rather than failing it.
 - Where no push token can be had (simulator, a build without Firebase), it
   falls back to an OS-scheduled background task
   (`features/notifications/background-check.ts`) that gets a Convex token from

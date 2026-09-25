@@ -10,7 +10,7 @@ import { useWorkspace } from '@/features/workspace/workspace';
 // Importing this module (through delivery.ts) defines the background tasks
 // at startup, which the OS requires before it can run them, and handles
 // Mark as read.
-import { stopDelivery, syncDelivery } from './delivery';
+import { retryForgottenTokens, stopDelivery, syncDelivery } from './delivery';
 import { checkMail, clearNotifyState, convexQuery, loadNotifyPrefs } from './mail-check';
 import { ACTIONS, configureNotifications, safeAppPath, storedPushToken, type PushData } from './push';
 
@@ -45,6 +45,16 @@ function Observer() {
       }),
     [registerSignOutHook, convex],
   );
+
+  // Removals a sign-out made offline could not send, retried on launch and on
+  // every return to the app, whether or not anyone is signed in now.
+  useEffect(() => {
+    void retryForgottenTokens(convex);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void retryForgottenTokens(convex);
+    });
+    return () => sub.remove();
+  }, [convex]);
 
   // Register with the server on every launch: it re-creates a token the
   // server dropped, and applies preferences a failed call left behind. A

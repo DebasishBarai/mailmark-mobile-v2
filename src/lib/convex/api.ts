@@ -271,6 +271,8 @@ export const api = {
       'pushTokens:register',
     ),
     unregister: mutation<{ token: string }>('pushTokens:unregister'),
+    /** Needs no session: the token is the proof. Used on sign-out and its retries. */
+    unregisterDevice: mutation<{ token: string }>('pushTokens:unregisterDevice'),
     sendTest: action<Empty, { sent: number }>('pushTokens:sendTest'),
   },
 
