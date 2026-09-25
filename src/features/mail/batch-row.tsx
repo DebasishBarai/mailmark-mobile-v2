@@ -51,7 +51,7 @@ export const BatchRow = memo(function BatchRow({ batchId, emails, onPress }: Bat
         <View style={styles.tallies}>
           {pending > 0 ? <Tally icon="pending" color={theme.textMuted} value={pending} label="sending" /> : null}
           {delivered > 0 ? <Tally icon="check" color={theme.success} value={delivered} label="delivered" /> : null}
-          {opened > 0 ? <Tally icon="eye" color={theme.success} value={opened} label="opened" /> : null}
+          {opened > 0 ? <Tally icon="doubleCheck" color={theme.success} value={opened} label="opened" /> : null}
           {failed > 0 ? <Tally icon="bounce" color={theme.danger} value={failed} label="bounced" /> : null}
         </View>
       </View>
@@ -60,7 +60,7 @@ export const BatchRow = memo(function BatchRow({ batchId, emails, onPress }: Bat
   );
 });
 
-function Tally({ icon, color, value, label }: { icon: 'pending' | 'check' | 'eye' | 'bounce'; color: string; value: number; label: string }) {
+function Tally({ icon, color, value, label }: { icon: 'pending' | 'check' | 'doubleCheck' | 'bounce'; color: string; value: number; label: string }) {
   return (
     <View style={styles.tally} accessibilityLabel={`${value} ${label}`}>
       <Icon name={icon} size={11} color={color} />
