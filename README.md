@@ -76,10 +76,10 @@ notifications on in More → Notifications.
 Push needs credentials in EAS, set up once with `bunx eas credentials`:
 
 - iOS: an APNs key (paid Apple Developer account). Simulators get no push.
-- Android: a Firebase project with the app `dev.mailmark.app`. Put its
-  `google-services.json` in the project root, add
-  `"googleServicesFile": "./google-services.json"` under `android` in
-  `app.json`, and upload the FCM V1 service account key to EAS.
+- Android: Firebase project `mailmark-mobile`, whose `google-services.json`
+  (public identifiers only) is committed and referenced from `app.json`. Its
+  FCM V1 service account key is secret: upload it to EAS, never commit it
+  (`.gitignore` blocks the usual file names).
 
 Where no push token can be had (simulator, a build without Firebase), the app
 falls back to an OS-scheduled background check (expo-background-task) with the

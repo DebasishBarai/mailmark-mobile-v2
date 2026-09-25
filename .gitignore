@@ -45,3 +45,8 @@ example
 # generated native folders
 /ios
 /android
+
+# Firebase service account keys (the FCM V1 key uploaded to EAS) are secret.
+# google-services.json is not: it only holds public identifiers.
+*firebase-adminsdk*.json
+*service-account*.json
