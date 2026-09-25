@@ -11,7 +11,7 @@ import { api } from '@/lib/convex/api';
 import type { Id } from '@/lib/convex/types';
 
 import { checkMail, convexQuery, loadNotifyPrefs, type LocalNotification } from './mail-check';
-import { ACTIONS, configureNotifications, type PushData } from './push';
+import { ACTIONS, configureNotifications, storedPushToken, type PushData } from './push';
 
 export const MAIL_CHECK_TASK = 'mailmark-mail-check';
 export const NOTIFICATION_ACTION_TASK = 'mailmark-notification-action';
@@ -47,8 +47,8 @@ export async function showNotifications(list: LocalNotification[]) {
 }
 
 /**
- * Background mail check. There is no server push in Mailmark, so the app
- * asks the OS to wake it periodically, reads the newest mail with the same
+ * Background mail check, the fallback where server push is unavailable (see
+ * delivery.ts). The app asks the OS to wake it periodically, reads the newest mail with the same
  * queries the website uses, and raises local notifications for what is new.
  * Timing is up to the OS (iOS schedules it by usage); it is not instant.
  */
@@ -56,6 +56,8 @@ TaskManager.defineTask(MAIL_CHECK_TASK, async () => {
   try {
     const prefs = await loadNotifyPrefs();
     if (!prefs.enabled || !Config.convexUrl) return BackgroundTask.BackgroundTaskResult.Success;
+    // The server pushes instead; checking too would announce mail twice.
+    if (await storedPushToken()) return BackgroundTask.BackgroundTaskResult.Success;
     const client = await authenticatedClient();
     if (!client) return BackgroundTask.BackgroundTaskResult.Success;
     const list = await checkMail(convexQuery(client), { silent: false, prefs });

@@ -7,16 +7,19 @@ import { AppState, Platform } from 'react-native';
 import { useSession } from '@/features/auth/session';
 import { useWorkspace } from '@/features/workspace/workspace';
 
-// Importing this module defines the background tasks at startup, which the
-// OS requires before it can run them, and handles Mark as read.
-import { unregisterMailCheck } from './background-check';
+// Importing this module (through delivery.ts) defines the background tasks
+// at startup, which the OS requires before it can run them, and handles
+// Mark as read.
+import { stopDelivery, syncDelivery } from './delivery';
 import { checkMail, clearNotifyState, convexQuery, loadNotifyPrefs } from './mail-check';
-import { ACTIONS, configureNotifications, safeAppPath, type PushData } from './push';
+import { ACTIONS, configureNotifications, safeAppPath, storedPushToken, type PushData } from './push';
 
 /**
- * Routes notification taps and the Open and Reply actions into the app, keeps the background
- * check's "seen" marker current while the app is open, and mirrors the
- * unread count onto the app icon badge. Renders nothing.
+ * Registers this device for push (or the background check where push is
+ * unavailable), routes notification taps and the Open and Reply actions into
+ * the app, keeps the background check's "seen" marker current while the app
+ * is open, and mirrors the unread count onto the app icon badge. Renders
+ * nothing.
  */
 export function NotificationObserver() {
   if (Platform.OS === 'web') return null;
@@ -36,20 +39,34 @@ function Observer() {
   useEffect(
     () =>
       registerSignOutHook(async () => {
-        await unregisterMailCheck();
+        await stopDelivery(convex);
         await clearNotifyState();
         await Notifications.setBadgeCountAsync(0);
       }),
-    [registerSignOutHook],
+    [registerSignOutHook, convex],
   );
 
-  // Whatever is on screen when the app is left counts as seen, so the next
-  // background check only announces mail that arrives after that.
+  // Register with the server on every launch: it re-creates a token the
+  // server dropped, and applies preferences a failed call left behind. A
+  // push token the OS rolls while the app runs is registered right away.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const sync = () => {
+      void loadNotifyPrefs().then((prefs) => syncDelivery(convex, prefs)).catch(() => {});
+    };
+    sync();
+    const sub = Notifications.addPushTokenListener(sync);
+    return () => sub.remove();
+  }, [isAuthenticated, convex]);
+
+  // In background-check mode, whatever is on screen when the app is left
+  // counts as seen, so the next check only announces mail after that.
   useEffect(() => {
     if (!isAuthenticated) return;
     const sync = async () => {
       const prefs = await loadNotifyPrefs();
-      if (prefs.enabled) await checkMail(convexQuery(convex), { silent: true, prefs }).catch(() => {});
+      if (!prefs.enabled || (await storedPushToken())) return;
+      await checkMail(convexQuery(convex), { silent: true, prefs }).catch(() => {});
     };
     void sync();
     const sub = AppState.addEventListener('change', (state) => {

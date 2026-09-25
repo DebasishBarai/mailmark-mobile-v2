@@ -1,11 +1,13 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
+import { local } from '@/lib/storage';
+
 /** What the app puts in a notification's `data`, read back when it is tapped. */
 export type PushData = {
   /** App path to open, e.g. "/email/<id>" or "/campaign/<batchId>". */
   url?: string;
-  type?: 'new_mail' | 'reply' | 'bounce' | 'delivery_issue' | 'campaign_completed' | 'campaign_error' | 'account' | 'billing';
+  type?: 'new_mail' | 'reply' | 'bounce' | 'delivery_issue' | 'campaign_completed' | 'campaign_error' | 'account' | 'billing' | 'test';
   emailId?: string;
   mailboxId?: string;
   folder?: string;
@@ -29,6 +31,18 @@ export const ACTIONS = {
   markRead: 'mark_read',
   view: 'view',
 } as const;
+
+const PUSH_TOKEN_KEY = 'pushToken';
+
+/** The Expo push token registered with the server, or null in background-check mode. */
+export async function storedPushToken(): Promise<string | null> {
+  return local.get<string | null>(PUSH_TOKEN_KEY, null);
+}
+
+export async function setStoredPushToken(token: string | null) {
+  if (token) await local.set(PUSH_TOKEN_KEY, token);
+  else await local.remove(PUSH_TOKEN_KEY);
+}
 
 let configured = false;
 
