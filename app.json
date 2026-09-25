@@ -19,6 +19,7 @@
     },
     "android": {
       "package": "dev.mailmark.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#ece7df",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
