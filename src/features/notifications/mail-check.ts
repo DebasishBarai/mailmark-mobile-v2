@@ -35,6 +35,8 @@ export const DEFAULT_NOTIFY_PREFS: NotifyPreferences = { enabled: false, newMail
 const PREFS_KEY = 'notifyPrefs';
 const STATE_KEY = 'notifyState';
 const PAGE = 20;
+/** New mail beyond this many is summed up in one notification. */
+const MAX_MAIL_NOTIFICATIONS = 5;
 const PROBLEM_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 type State = {
@@ -125,22 +127,23 @@ export async function checkMail(query: Query, options: { silent: boolean; prefs:
   if (options.silent) return [];
 
   if (options.prefs.newMail && newMail.length > 0) {
+    // One notification per message, so each has its own Open and Mark as read.
     newMail.sort((a, b) => b._creationTime - a._creationTime);
-    if (newMail.length <= 3) {
-      for (const e of newMail) {
-        out.push({
-          title: nameOf(e.from),
-          body: e.subject || '(no subject)',
-          data: { url: emailPath(e), emailId: e._id, mailboxId: e.mailboxId, folder: e.folder, type: 'new_mail' },
-          channelId: CHANNELS.mail,
-          categoryIdentifier: CATEGORIES.email,
-        });
-      }
-    } else {
+    for (const e of newMail.slice(0, MAX_MAIL_NOTIFICATIONS)) {
       out.push({
-        title: `${newMail.length} new messages`,
-        body: newMail.slice(0, 3).map((e) => `${nameOf(e.from)}: ${e.subject}`).join('\n'),
-        data: { url: `/mailbox/${newMail[0].mailboxId}` , type: 'new_mail' },
+        title: nameOf(e.from),
+        body: e.subject || '(no subject)',
+        data: { url: emailPath(e), emailId: e._id, mailboxId: e.mailboxId, folder: e.folder, type: 'new_mail' },
+        channelId: CHANNELS.mail,
+        categoryIdentifier: CATEGORIES.email,
+      });
+    }
+    const rest = newMail.slice(MAX_MAIL_NOTIFICATIONS);
+    if (rest.length > 0) {
+      out.push({
+        title: `${rest.length} more new message${rest.length === 1 ? '' : 's'}`,
+        body: rest.slice(0, 3).map((e) => `${nameOf(e.from)}: ${e.subject}`).join('\n'),
+        data: { url: `/mailbox/${rest[0].mailboxId}`, type: 'new_mail' },
         channelId: CHANNELS.mail,
       });
     }

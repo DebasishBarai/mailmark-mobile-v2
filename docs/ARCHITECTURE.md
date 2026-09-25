@@ -124,9 +124,15 @@ password, codes, MFA, passkeys, SSO) works without the app implementing each.
   sent mail of each mailbox with the website's queries, and raises local
   notifications for unread mail and bounces newer than the last check
   (`mail-check.ts`). The OS controls timing, so it is not instant.
+- Each new email gets its own notification (the newest five; the rest are
+  summed up in one) with Open, Mark as read and Reply buttons.
 - While the app is open, `NotificationObserver` records what the user has seen
-  (so it is never announced later), routes taps and actions (Reply, Mark as
-  read), and mirrors total unread onto the app icon badge.
+  (so it is never announced later), routes taps and the Open and Reply
+  actions, and mirrors total unread onto the app icon badge.
+- Mark as read does not open the app, so `background-check.ts` handles it at
+  module scope with the stored Clerk session and a Convex HTTP client: through
+  the response listener on iOS and a `registerTaskAsync` notification task on
+  Android, where a background action only reaches that task.
 - Notification data carries an in-app path in `data.url`; only paths matching
   app routes are followed (`safeAppPath`).
 - `+native-intent.tsx` maps `mailmark://` links and website URLs
