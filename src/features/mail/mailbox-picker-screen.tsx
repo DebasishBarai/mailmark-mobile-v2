@@ -26,7 +26,10 @@ export function MailboxPickerScreen() {
   const close = () => router.back();
 
   return (
+    // nestedScrollEnabled lets the Android sheet see this list, so a downward
+    // drag scrolls the list back to the top before it starts closing the sheet.
     <ScrollView
+      nestedScrollEnabled
       style={{ backgroundColor: theme.background }}
       contentContainerStyle={styles.container}
       contentInsetAdjustmentBehavior="automatic">
