@@ -1,4 +1,4 @@
-import { useConvex, useMutation } from 'convex/react';
+import { useConvex } from 'convex/react';
 import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
@@ -6,19 +6,20 @@ import { AppState, Platform } from 'react-native';
 
 import { useSession } from '@/features/auth/session';
 import { useWorkspace } from '@/features/workspace/workspace';
-import { api } from '@/lib/convex/api';
-import type { Id } from '@/lib/convex/types';
 
-// Importing this module defines the background task at startup, which the
-// OS requires before it can run it.
-import { unregisterMailCheck } from './background-check';
+// Importing this module (through delivery.ts) defines the background tasks
+// at startup, which the OS requires before it can run them, and handles
+// Mark as read.
+import { retryForgottenTokens, stopDelivery, syncDelivery } from './delivery';
 import { checkMail, clearNotifyState, convexQuery, loadNotifyPrefs } from './mail-check';
-import { ACTIONS, configureNotifications, safeAppPath, type PushData } from './push';
+import { ACTIONS, configureNotifications, safeAppPath, storedPushToken, type PushData } from './push';
 
 /**
- * Routes notification taps and actions into the app, keeps the background
- * check's "seen" marker current while the app is open, and mirrors the
- * unread count onto the app icon badge. Renders nothing.
+ * Registers this device for push (or the background check where push is
+ * unavailable), routes notification taps and the Open and Reply actions into
+ * the app, keeps the background check's "seen" marker current while the app
+ * is open, and mirrors the unread count onto the app icon badge. Renders
+ * nothing.
  */
 export function NotificationObserver() {
   if (Platform.OS === 'web') return null;
@@ -29,7 +30,6 @@ function Observer() {
   const convex = useConvex();
   const { isAuthenticated, registerSignOutHook } = useSession();
   const { totalUnread } = useWorkspace();
-  const markAsRead = useMutation(api.emails.markAsRead);
   const handledInitial = useRef(false);
 
   useEffect(() => {
@@ -39,20 +39,44 @@ function Observer() {
   useEffect(
     () =>
       registerSignOutHook(async () => {
-        await unregisterMailCheck();
+        await stopDelivery(convex);
         await clearNotifyState();
         await Notifications.setBadgeCountAsync(0);
       }),
-    [registerSignOutHook],
+    [registerSignOutHook, convex],
   );
 
-  // Whatever is on screen when the app is left counts as seen, so the next
-  // background check only announces mail that arrives after that.
+  // Removals a sign-out made offline could not send, retried on launch and on
+  // every return to the app, whether or not anyone is signed in now.
+  useEffect(() => {
+    void retryForgottenTokens(convex);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void retryForgottenTokens(convex);
+    });
+    return () => sub.remove();
+  }, [convex]);
+
+  // Register with the server on every launch: it re-creates a token the
+  // server dropped, and applies preferences a failed call left behind. A
+  // push token the OS rolls while the app runs is registered right away.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const sync = () => {
+      void loadNotifyPrefs().then((prefs) => syncDelivery(convex, prefs)).catch(() => {});
+    };
+    sync();
+    const sub = Notifications.addPushTokenListener(sync);
+    return () => sub.remove();
+  }, [isAuthenticated, convex]);
+
+  // In background-check mode, whatever is on screen when the app is left
+  // counts as seen, so the next check only announces mail after that.
   useEffect(() => {
     if (!isAuthenticated) return;
     const sync = async () => {
       const prefs = await loadNotifyPrefs();
-      if (prefs.enabled) await checkMail(convexQuery(convex), { silent: true, prefs }).catch(() => {});
+      if (!prefs.enabled || (await storedPushToken())) return;
+      await checkMail(convexQuery(convex), { silent: true, prefs }).catch(() => {});
     };
     void sync();
     const sub = AppState.addEventListener('change', (state) => {
@@ -68,11 +92,8 @@ function Observer() {
       const data = (response.notification.request.content.data ?? {}) as PushData;
       const action = response.actionIdentifier;
 
-      if (action === ACTIONS.markRead && data.emailId) {
-        markAsRead({ emailId: data.emailId as Id<'emails'> }).catch(() => {});
-        void Notifications.dismissNotificationAsync(response.notification.request.identifier);
-        return;
-      }
+      // Handled in background-check.ts, which works without the app open.
+      if (action === ACTIONS.markRead) return;
       if (action === ACTIONS.reply && data.emailId) {
         router.push({
           pathname: '/compose',
@@ -96,7 +117,7 @@ function Observer() {
 
     const sub = Notifications.addNotificationResponseReceivedListener(handle);
     return () => sub.remove();
-  }, [isAuthenticated, markAsRead]);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated) return;

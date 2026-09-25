@@ -99,8 +99,8 @@ same way the website does (for example, mailboxes per domain with
 
 | Feature | Implementation | Change |
 | --- | --- | --- |
-| Notifications (new mail, bounces and spam reports) | OS-scheduled background check (expo-background-task) with the website's queries, local notifications with Reply / Mark as read / View campaign actions; not instant | None |
-| Notification preferences | Stored on the device | None |
+| Notifications (new mail, bounces and spam reports) | Instant server push (Expo Push Service) with Open / Mark as read / Reply and View campaign actions; OS-scheduled background check with local notifications where push is unavailable | `pushTokens` and `convex/push.ts` (added) |
+| Notification preferences | Stored on the device and sent with the push token | `pushTokens.register` (added) |
 | Deep links | `mailmark://email/{id}?mailbox=&folder=`, `thread`, `campaign`, `sequence`, `mailbox`, `domain`; website URLs via `+native-intent.tsx` | None (universal links additionally need AASA / assetlinks files on the website) |
 | App lock | Face ID / Touch ID / fingerprint / passcode on launch and resume | None |
 | Haptics, share sheet, clipboard | Throughout | None |

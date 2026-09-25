@@ -118,15 +118,35 @@ password, codes, MFA, passkeys, SSO) works without the app implementing each.
 
 ## Notifications and deep links
 
-- Mailmark has no server push, and the app adds none. Instead an
-  OS-scheduled background task (`features/notifications/background-check.ts`)
-  gets a Convex token from the stored Clerk session, reads the newest inbox and
-  sent mail of each mailbox with the website's queries, and raises local
-  notifications for unread mail and bounces newer than the last check
-  (`mail-check.ts`). The OS controls timing, so it is not instant.
+- The backend pushes through the Expo Push Service as soon as new inbox mail
+  arrives or a sent message bounces (`convex/push.ts` in the website repo).
+  `features/notifications/delivery.ts` registers this device's Expo push token
+  and preferences with `pushTokens.register` on launch, on every preference
+  change and when the token rolls, and unregisters on sign-out or when
+  notifications are turned off. Unregistering uses
+  `pushTokens.unregisterDevice`, which needs no session, and is queued on the
+  device until it lands, so a sign-out made offline still stops pushes on the
+  next launch. The server also drops tokens not registered for 90 days.
+  Server calls wait at most 5 seconds, since offline the Convex client holds
+  a mutation rather than failing it.
+- Where no push token can be had (simulator, a build without Firebase), it
+  falls back to an OS-scheduled background task
+  (`features/notifications/background-check.ts`) that gets a Convex token from
+  the stored Clerk session, reads the newest inbox and sent mail of each
+  mailbox with the website's queries, and raises local notifications for
+  unread mail and bounces newer than the last check (`mail-check.ts`). The OS
+  controls timing, so it is not instant. Only one of the two runs, so mail is
+  never announced twice.
+- Each new email gets its own notification (the server and the fallback both
+  send the newest five and sum up the rest in one) with Open, Mark as read and
+  Reply buttons.
 - While the app is open, `NotificationObserver` records what the user has seen
-  (so it is never announced later), routes taps and actions (Reply, Mark as
-  read), and mirrors total unread onto the app icon badge.
+  (so it is never announced later), routes taps and the Open and Reply
+  actions, and mirrors total unread onto the app icon badge.
+- Mark as read does not open the app, so `background-check.ts` handles it at
+  module scope with the stored Clerk session and a Convex HTTP client: through
+  the response listener on iOS and a `registerTaskAsync` notification task on
+  Android, where a background action only reaches that task.
 - Notification data carries an in-app path in `data.url`; only paths matching
   app routes are followed (`safeAppPath`).
 - `+native-intent.tsx` maps `mailmark://` links and website URLs

@@ -7,9 +7,9 @@
  * and states their argument and return types here.
  *
  * Rule: every entry is a public function the website itself calls, with the
- * same arguments. The app adds no backend functions and needs no backend
- * changes. Check a new entry against the website's app/ directory before
- * adding it.
+ * same arguments. Check a new entry against the website's app/ directory
+ * before adding it. The one exception is `pushTokens`, which the backend
+ * added for the mobile app's push notifications (convex/pushTokens.ts).
  */
 
 import { makeFunctionReference, type PaginationOptions, type PaginationResult } from 'convex/server';
@@ -264,6 +264,16 @@ export const api = {
     apply: mutation<{ payoutEmail: string; website?: string; audienceDescription: string }, unknown>(
       'affiliates:apply',
     ),
+  },
+
+  pushTokens: {
+    register: mutation<{ token: string; platform: 'ios' | 'android'; newMail: boolean; bounces: boolean }>(
+      'pushTokens:register',
+    ),
+    unregister: mutation<{ token: string }>('pushTokens:unregister'),
+    /** Needs no session: the token is the proof. Used on sign-out and its retries. */
+    unregisterDevice: mutation<{ token: string }>('pushTokens:unregisterDevice'),
+    sendTest: action<Empty, { sent: number }>('pushTokens:sendTest'),
   },
 
   support: {

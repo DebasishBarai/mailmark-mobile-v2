@@ -68,11 +68,23 @@ functions the website already calls, with the same arguments (the list is in
 
 ### Notifications
 
-Mailmark has no server push, so the app checks for new mail and bounces with
-an OS-scheduled background task (expo-background-task) using the same queries
-the website uses, and shows local notifications. The OS decides when the check
-runs (about every 15 minutes at best on Android; iOS schedules it by usage), so
-notifications are timely but not instant. Turn them on in More → Notifications.
+The backend sends a push through the Expo Push Service the moment new mail
+arrives or a sent message bounces (`convex/push.ts` in the website repo). The
+app registers the device's Expo push token with `pushTokens.register`. Turn
+notifications on in More → Notifications.
+
+Push needs credentials in EAS, set up once with `bunx eas credentials`:
+
+- iOS: an APNs key (paid Apple Developer account). Simulators get no push.
+- Android: a Firebase project with the app `dev.mailmark.app`. Put its
+  `google-services.json` in the project root, add
+  `"googleServicesFile": "./google-services.json"` under `android` in
+  `app.json`, and upload the FCM V1 service account key to EAS.
+
+Where no push token can be had (simulator, a build without Firebase), the app
+falls back to an OS-scheduled background check (expo-background-task) with the
+website's queries and local notifications. The OS decides when it runs (about
+every 15 minutes at best), so those are not instant.
 
 ### Clerk
 

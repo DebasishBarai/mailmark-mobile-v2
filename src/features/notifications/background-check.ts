@@ -7,11 +7,14 @@ import { ConvexHttpClient } from 'convex/browser';
 import { Platform } from 'react-native';
 
 import { Config } from '@/lib/config';
+import { api } from '@/lib/convex/api';
+import type { Id } from '@/lib/convex/types';
 
 import { checkMail, convexQuery, loadNotifyPrefs, type LocalNotification } from './mail-check';
-import { configureNotifications } from './push';
+import { ACTIONS, configureNotifications, storedPushToken, type PushData } from './push';
 
 export const MAIL_CHECK_TASK = 'mailmark-mail-check';
+export const NOTIFICATION_ACTION_TASK = 'mailmark-notification-action';
 
 /** The shortest interval the OS will honour; iOS may run the task less often. */
 const MINIMUM_INTERVAL_MINUTES = 15;
@@ -44,8 +47,8 @@ export async function showNotifications(list: LocalNotification[]) {
 }
 
 /**
- * Background mail check. There is no server push in Mailmark, so the app
- * asks the OS to wake it periodically, reads the newest mail with the same
+ * Background mail check, the fallback where server push is unavailable (see
+ * delivery.ts). The app asks the OS to wake it periodically, reads the newest mail with the same
  * queries the website uses, and raises local notifications for what is new.
  * Timing is up to the OS (iOS schedules it by usage); it is not instant.
  */
@@ -53,6 +56,8 @@ TaskManager.defineTask(MAIL_CHECK_TASK, async () => {
   try {
     const prefs = await loadNotifyPrefs();
     if (!prefs.enabled || !Config.convexUrl) return BackgroundTask.BackgroundTaskResult.Success;
+    // The server pushes instead; checking too would announce mail twice.
+    if (await storedPushToken()) return BackgroundTask.BackgroundTaskResult.Success;
     const client = await authenticatedClient();
     if (!client) return BackgroundTask.BackgroundTaskResult.Success;
     const list = await checkMail(convexQuery(client), { silent: false, prefs });
@@ -62,6 +67,51 @@ TaskManager.defineTask(MAIL_CHECK_TASK, async () => {
     return BackgroundTask.BackgroundTaskResult.Failed;
   }
 });
+
+const markedRead = new Set<string>();
+
+/**
+ * The Mark as read button. It does not open the app, so it cannot rely on the
+ * React tree being mounted or signed in: it uses the stored Clerk session and
+ * an HTTP client, like the background check. A notification is handled once
+ * even if both the listener and the Android task report it.
+ */
+async function markReadFromNotification(response: Notifications.NotificationResponse) {
+  const { identifier, content } = response.notification.request;
+  const data = (content.data ?? {}) as PushData;
+  if (response.actionIdentifier !== ACTIONS.markRead || !data.emailId || markedRead.has(identifier)) return;
+  markedRead.add(identifier);
+  try {
+    const client = await authenticatedClient();
+    if (!client) return;
+    await client.mutation(api.emails.markAsRead, { emailId: data.emailId as Id<'emails'> });
+    await Notifications.dismissNotificationAsync(identifier);
+    const badge = await Notifications.getBadgeCountAsync();
+    if (badge > 0) await Notifications.setBadgeCountAsync(badge - 1);
+  } catch {
+    markedRead.delete(identifier);
+  }
+}
+
+/**
+ * On Android an action tapped while the app is in the background or closed is
+ * delivered only to this task; on iOS it reaches the response listener below.
+ */
+TaskManager.defineTask<Notifications.NotificationTaskPayload>(NOTIFICATION_ACTION_TASK, async ({ data }) => {
+  if (data && 'actionIdentifier' in data) await markReadFromNotification(data);
+});
+
+if (Platform.OS !== 'web') {
+  Notifications.addNotificationResponseReceivedListener((response) => void markReadFromNotification(response));
+  // The button that launched the app from a closed state. Cleared so it is not
+  // replayed later on an email the user has since marked unread.
+  const initial = Notifications.getLastNotificationResponse();
+  if (initial?.actionIdentifier === ACTIONS.markRead) {
+    void markReadFromNotification(initial);
+    void Notifications.clearLastNotificationResponseAsync();
+  }
+  if (Platform.OS === 'android') Notifications.registerTaskAsync(NOTIFICATION_ACTION_TASK).catch(() => {});
+}
 
 export async function registerMailCheck() {
   if (Platform.OS === 'web') return;
