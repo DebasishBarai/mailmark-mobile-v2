@@ -8,7 +8,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ConnectionBanner } from '@/components/feedback/connection-banner';
 import { Colors } from '@/constants/theme';
-import { ConnectingScreen } from '@/features/auth/connecting-screen';
+import { ConnectingScreen, useClerkFailed } from '@/features/auth/connecting-screen';
 import { useSession } from '@/features/auth/session';
 import { NotificationObserver } from '@/features/notifications/notification-observer';
 import { AppLockGate } from '@/features/settings/app-lock';
@@ -95,6 +95,7 @@ export default function RootLayout() {
 function RootNavigator() {
   const { isAuthenticated, isLoading } = useSession();
   const stackOptions = useStackOptions();
+  const clerkFailed = useClerkFailed();
 
   const [slow, setSlow] = useState(false);
 
@@ -103,17 +104,22 @@ function RootNavigator() {
       SplashScreen.hideAsync();
       return;
     }
+    if (clerkFailed) {
+      SplashScreen.hideAsync();
+      return;
+    }
     const timer = setTimeout(() => {
       setSlow(true);
       SplashScreen.hideAsync();
     }, STARTUP_TIMEOUT_MS);
     return () => clearTimeout(timer);
-  }, [isLoading]);
+  }, [isLoading, clerkFailed]);
 
   // Keep the splash up while Clerk restores the session from secure storage,
   // so a signed-in user never sees the sign-in screen flash past. If that
-  // takes too long, say so rather than leaving a frozen splash.
-  if (isLoading) return slow ? <ConnectingScreen /> : null;
+  // takes too long, or Clerk fails outright, say so rather than leaving a
+  // frozen splash.
+  if (isLoading) return slow || clerkFailed ? <ConnectingScreen /> : null;
 
   return (
     <Stack screenOptions={{ ...stackOptions, headerShown: false }}>
