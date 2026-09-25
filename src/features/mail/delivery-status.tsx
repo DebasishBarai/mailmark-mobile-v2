@@ -26,7 +26,7 @@ export const DELIVERY_META: Record<DeliveryState, { label: string; icon: IconNam
   scheduled: { label: 'Scheduled', icon: 'calendar', tone: 'info' },
   pending: { label: 'Sending', icon: 'pending', tone: 'muted' },
   delivered: { label: 'Delivered', icon: 'check', tone: 'success' },
-  opened: { label: 'Opened', icon: 'doubleCheck', tone: 'success' },
+  opened: { label: 'Opened', icon: 'eye', tone: 'success' },
   clicked: { label: 'Clicked', icon: 'cursor', tone: 'accent' },
   replied: { label: 'Replied', icon: 'reply', tone: 'accent' },
   bounced: { label: 'Bounced', icon: 'bounce', tone: 'danger' },

@@ -42,7 +42,7 @@ export function DeliveryPanel({ email }: { email: Email }) {
     steps.push({ icon: 'pending', label: 'Waiting for delivery confirmation', tone: 'pending' });
   }
 
-  if (email.openedAt) steps.push({ icon: 'doubleCheck', label: 'Opened', at: email.openedAt, tone: 'done' });
+  if (email.openedAt) steps.push({ icon: 'eye', label: 'Opened', at: email.openedAt, tone: 'done' });
   for (const click of email.clickedLinks ?? []) {
     steps.push({ icon: 'cursor', label: 'Clicked a link', at: click.clickedAt, detail: click.url, tone: 'done' });
   }

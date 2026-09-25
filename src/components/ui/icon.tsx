@@ -1,6 +1,6 @@
 import { SymbolView } from 'expo-symbols';
 import type { ComponentProps } from 'react';
-import { StyleSheet, View, type ColorValue } from 'react-native';
+import type { ColorValue } from 'react-native';
 
 type SymbolName = ComponentProps<typeof SymbolView>['name'];
 
@@ -30,8 +30,6 @@ export const Icons = {
   minus: { ios: 'minus', android: 'remove', web: 'remove' },
   close: { ios: 'xmark', android: 'close', web: 'close' },
   check: { ios: 'checkmark', android: 'done', web: 'done' },
-  // SF Symbols has no double checkmark; Icon draws two on iOS.
-  doubleCheck: { ios: 'checkmark', android: 'done_all', web: 'done_all' },
   checkCircle: { ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' },
   pending: { ios: 'clock', android: 'schedule', web: 'schedule' },
   warning: { ios: 'exclamationmark.triangle.fill', android: 'warning', web: 'warning' },
@@ -113,27 +111,5 @@ export type IconProps = {
 };
 
 export function Icon({ name, size = 20, color }: IconProps) {
-  if (name === 'doubleCheck' && process.env.EXPO_OS === 'ios') return <DoubleCheck size={size} color={color} />;
   return <SymbolView name={Icons[name]} size={size} tintColor={color} resizeMode="scaleAspectFit" />;
 }
-
-/** Two overlapping checkmarks, like Material's done_all, in the same box. */
-function DoubleCheck({ size, color }: { size: number; color?: ColorValue }) {
-  const mark = size * 0.72;
-  return (
-    <View style={{ width: size, height: size }}>
-      <View style={[styles.mark, { left: 0, top: (size - mark) / 2 }]}>
-        <SymbolView name="checkmark" size={mark} tintColor={color} resizeMode="scaleAspectFit" />
-      </View>
-      <View style={[styles.mark, { right: 0, top: (size - mark) / 2 }]}>
-        <SymbolView name="checkmark" size={mark} tintColor={color} resizeMode="scaleAspectFit" />
-      </View>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  mark: {
-    position: 'absolute',
-  },
-});
