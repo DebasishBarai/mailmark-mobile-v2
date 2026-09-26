@@ -153,7 +153,12 @@ password, codes, MFA, passkeys, SSO) works without the app implementing each.
 - Mark as read does not open the app, so `background-check.ts` handles it at
   module scope with the stored Clerk session and a Convex HTTP client: through
   the response listener on iOS and a `registerTaskAsync` notification task on
-  Android, where a background action only reaches that task.
+  Android, where a background action only reaches that task. The tap is
+  saved on the device (`pending-reads.ts`) and the notification dismissed at
+  once, so it works offline: the call is sent then, and retried on launch, on
+  return to the app, when the network comes back and on each background
+  check. A tap the server refuses (the email was deleted) is dropped; the
+  queue is cleared on sign-out.
 - Notification data carries an in-app path in `data.url`; only paths matching
   app routes are followed (`safeAppPath`).
 - `+native-intent.tsx` maps `mailmark://` links and website URLs

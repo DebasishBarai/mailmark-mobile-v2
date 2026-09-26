@@ -11,6 +11,7 @@ import { api } from '@/lib/convex/api';
 import type { Id } from '@/lib/convex/types';
 
 import { checkMail, convexQuery, loadNotifyPrefs, type LocalNotification } from './mail-check';
+import { flushPendingReads, pendingReads, queueMarkRead } from './pending-reads';
 import { ACTIONS, CHANNELS, configureNotifications, storedPushToken, type PushData } from './push';
 
 export const MAIL_CHECK_TASK = 'mailmark-mail-check';
@@ -57,6 +58,7 @@ TaskManager.defineTask(MAIL_CHECK_TASK, async () => {
   try {
     const prefs = await loadNotifyPrefs();
     if (!prefs.enabled || !Config.convexUrl) return BackgroundTask.BackgroundTaskResult.Success;
+    await sendPendingReads();
     // The server pushes instead; checking too would announce mail twice.
     if (await storedPushToken()) return BackgroundTask.BackgroundTaskResult.Success;
     const client = await authenticatedClient();
@@ -74,8 +76,10 @@ const markedRead = new Set<string>();
 /**
  * The Mark as read button. It does not open the app, so it cannot rely on the
  * React tree being mounted or signed in: it uses the stored Clerk session and
- * an HTTP client, like the background check. A notification is handled once
- * even if both the listener and the Android task report it.
+ * an HTTP client, like the background check. The tap is queued first
+ * (pending-reads.ts), so it still lands if there is no connection now. A
+ * notification is handled once even if both the listener and the Android task
+ * report it.
  */
 async function markReadFromNotification(response: Notifications.NotificationResponse) {
   const { identifier, content } = response.notification.request;
@@ -83,14 +87,29 @@ async function markReadFromNotification(response: Notifications.NotificationResp
   if (response.actionIdentifier !== ACTIONS.markRead || !data.emailId || markedRead.has(identifier)) return;
   markedRead.add(identifier);
   try {
-    const client = await authenticatedClient();
-    if (!client) return;
-    await client.mutation(api.emails.markAsRead, { emailId: data.emailId as Id<'emails'> });
+    await queueMarkRead(data.emailId);
     await Notifications.dismissNotificationAsync(identifier);
     const badge = await Notifications.getBadgeCountAsync();
     if (badge > 0) await Notifications.setBadgeCountAsync(badge - 1);
   } catch {
-    markedRead.delete(identifier);
+    // The tap is queued; a notification left on screen is harmless.
+  }
+  await sendPendingReads();
+}
+
+/**
+ * Send queued Mark as read taps, if signed in and online. Never throws; what
+ * does not land stays queued for the next try.
+ */
+export async function sendPendingReads(): Promise<void> {
+  try {
+    // Nothing queued is the usual case: skip waiting on Clerk.
+    if (!(await pendingReads()).length) return;
+    const client = await authenticatedClient();
+    if (!client) return;
+    await flushPendingReads((emailId) => client.mutation(api.emails.markAsRead, { emailId: emailId as Id<'emails'> }));
+  } catch {
+    // Offline, Clerk cannot mint a token: the queue waits.
   }
 }
 

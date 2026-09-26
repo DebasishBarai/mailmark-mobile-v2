@@ -8,3 +8,4 @@ export async function unregisterMailCheck() {}
 export async function backgroundStatus(): Promise<'available' | 'restricted' | 'unavailable'> {
   return 'unavailable';
 }
+export async function sendPendingReads() {}
