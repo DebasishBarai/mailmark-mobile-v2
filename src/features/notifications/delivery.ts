@@ -130,14 +130,22 @@ async function sync(convex: ConvexReactClient, prefs: NotifyPreferences): Promis
   if (token) {
     // A queued removal of this same token is superseded by registering it.
     await local.set(FORGET_KEY, (await forgetList()).filter((t) => t !== token));
-    const outcome = await withinTimeout(
-      convex.mutation(api.pushTokens.register, {
-        token,
-        platform: Platform.OS === 'ios' ? 'ios' : 'android',
-        newMail: prefs.newMail,
-        bounces: prefs.bounces,
-      }),
-    );
+    const register = (displaysSilentPush: boolean) =>
+      withinTimeout(
+        convex.mutation(api.pushTokens.register, {
+          token,
+          platform: Platform.OS === 'ios' ? 'ios' : 'android',
+          newMail: prefs.newMail,
+          bounces: prefs.bounces,
+          ...(displaysSilentPush ? { displaysSilentPush } : {}),
+        }),
+      );
+    // Android asks for silent pushes, which it shows itself with their
+    // buttons (background-check.ts). A server that predates the field rejects
+    // the call, so it is retried without; pushes then come without buttons.
+    const android = Platform.OS === 'android';
+    let outcome = await register(android);
+    if (outcome === 'failed' && android) outcome = await register(false);
     // 'pending' is a call waiting for the connection: it lands then, so this
     // device is in push mode (starting the background check too would
     // announce mail twice). 'failed' with the token registered by an earlier

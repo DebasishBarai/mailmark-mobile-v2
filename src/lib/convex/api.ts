@@ -267,7 +267,7 @@ export const api = {
   },
 
   pushTokens: {
-    register: mutation<{ token: string; platform: 'ios' | 'android'; newMail: boolean; bounces: boolean }>(
+    register: mutation<{ token: string; platform: 'ios' | 'android'; newMail: boolean; bounces: boolean; displaysSilentPush?: boolean }>(
       'pushTokens:register',
     ),
     unregister: mutation<{ token: string }>('pushTokens:unregister'),

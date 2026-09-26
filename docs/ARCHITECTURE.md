@@ -143,6 +143,13 @@ password, codes, MFA, passkeys, SSO) works without the app implementing each.
 - While the app is open, `NotificationObserver` records what the user has seen
   (so it is never announced later), routes taps and the Open and Reply
   actions, and mirrors total unread onto the app icon badge.
+- Android draws an ordinary push itself while the app is in the background
+  or closed, without its buttons. So the Android app registers with
+  `displaysSilentPush` and the server sends it data-only pushes, with what to
+  show in `data.display`; the `registerTaskAsync` notification task in
+  `background-check.ts` shows each as a local notification, buttons included.
+  Against a server without that field the app registers without it, and
+  pushes arrive without buttons. iOS gets ordinary pushes.
 - Mark as read does not open the app, so `background-check.ts` handles it at
   module scope with the stored Clerk session and a Convex HTTP client: through
   the response listener on iOS and a `registerTaskAsync` notification task on
