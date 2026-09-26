@@ -11,10 +11,11 @@ import { api } from '@/lib/convex/api';
 import type { Id } from '@/lib/convex/types';
 
 import { checkMail, convexQuery, loadNotifyPrefs, type LocalNotification } from './mail-check';
-import { ACTIONS, configureNotifications, storedPushToken, type PushData } from './push';
+import { ACTIONS, CHANNELS, configureNotifications, storedPushToken, type PushData } from './push';
 
 export const MAIL_CHECK_TASK = 'mailmark-mail-check';
-export const NOTIFICATION_ACTION_TASK = 'mailmark-notification-action';
+/** Android only: notification buttons and incoming silent pushes. Named for the first. */
+export const NOTIFICATION_TASK = 'mailmark-notification-action';
 
 /** The shortest interval the OS will honour; iOS may run the task less often. */
 const MINIMUM_INTERVAL_MINUTES = 15;
@@ -93,12 +94,48 @@ async function markReadFromNotification(response: Notifications.NotificationResp
   }
 }
 
+/** What the server puts in `data.display` of a silent push. */
+type Display = { title?: string; body?: string; badge?: number; channelId?: string; categoryId?: string };
+
+/**
+ * A silent push, shown as a local notification. Android draws an ordinary
+ * push itself while the app is in the background or closed, without the
+ * category's buttons, so the server sends this app data-only pushes instead
+ * (forDevice in the website's convex/lib/push.ts) and it shows them here,
+ * buttons included. The rest of `data` is what a tap or button reads back.
+ */
+async function showSilentPush(payload: { data?: { dataString?: string } }) {
+  let data: Record<string, string>;
+  let shown: Display;
+  try {
+    data = JSON.parse(payload.data?.dataString ?? '');
+    shown = JSON.parse(data.display);
+  } catch {
+    return;
+  }
+  if (!shown?.title && !shown?.body) return;
+  const { display: _display, ...rest } = data;
+  await showNotifications([
+    {
+      title: shown.title ?? '',
+      body: shown.body ?? '',
+      data: rest,
+      channelId: shown.channelId ?? CHANNELS.mail,
+      categoryIdentifier: shown.categoryId,
+    },
+  ]);
+  if (typeof shown.badge === 'number') await Notifications.setBadgeCountAsync(shown.badge).catch(() => {});
+}
+
 /**
  * On Android an action tapped while the app is in the background or closed is
- * delivered only to this task; on iOS it reaches the response listener below.
+ * delivered only to this task (on iOS it reaches the response listener
+ * below), and so is every incoming push, open or not.
  */
-TaskManager.defineTask<Notifications.NotificationTaskPayload>(NOTIFICATION_ACTION_TASK, async ({ data }) => {
-  if (data && 'actionIdentifier' in data) await markReadFromNotification(data);
+TaskManager.defineTask<Notifications.NotificationTaskPayload>(NOTIFICATION_TASK, async ({ data }) => {
+  if (!data) return;
+  if ('actionIdentifier' in data) await markReadFromNotification(data);
+  else await showSilentPush(data);
 });
 
 if (Platform.OS !== 'web') {
@@ -110,7 +147,7 @@ if (Platform.OS !== 'web') {
     void markReadFromNotification(initial);
     void Notifications.clearLastNotificationResponseAsync();
   }
-  if (Platform.OS === 'android') Notifications.registerTaskAsync(NOTIFICATION_ACTION_TASK).catch(() => {});
+  if (Platform.OS === 'android') Notifications.registerTaskAsync(NOTIFICATION_TASK).catch(() => {});
 }
 
 export async function registerMailCheck() {

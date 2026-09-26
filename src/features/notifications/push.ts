@@ -78,9 +78,9 @@ export async function configureNotifications() {
   }
 
   await Notifications.setNotificationCategoryAsync(CATEGORIES.email, [
-    { identifier: ACTIONS.open, buttonTitle: 'Open', options: { opensAppToForeground: true } },
     { identifier: ACTIONS.markRead, buttonTitle: 'Mark as read', options: { opensAppToForeground: false } },
     { identifier: ACTIONS.reply, buttonTitle: 'Reply', options: { opensAppToForeground: true } },
+    { identifier: ACTIONS.open, buttonTitle: 'Open', options: { opensAppToForeground: true } },
   ]);
   await Notifications.setNotificationCategoryAsync(CATEGORIES.campaign, [
     { identifier: ACTIONS.view, buttonTitle: 'View campaign', options: { opensAppToForeground: true } },
