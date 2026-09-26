@@ -66,6 +66,30 @@ export type LocalNotification = {
   categoryIdentifier?: string;
 };
 
+// A Windows-1252 byte read as Latin-1 lands on a C1 control code, which a
+// notification draws as a box: 0x96, the en dash, is the usual one.
+const CP1252: Record<string, string> = {
+  '\x80': '€', '\x82': '‚', '\x83': 'ƒ', '\x84': '„', '\x85': '…',
+  '\x86': '†', '\x87': '‡', '\x88': 'ˆ', '\x89': '‰', '\x8a': 'Š',
+  '\x8b': '‹', '\x8c': 'Œ', '\x8e': 'Ž', '\x91': '‘', '\x92': '’',
+  '\x93': '“', '\x94': '”', '\x95': '•', '\x96': '–', '\x97': '—',
+  '\x98': '˜', '\x99': '™', '\x9a': 'š', '\x9b': '›', '\x9c': 'œ',
+  '\x9e': 'ž', '\x9f': 'Ÿ',
+};
+
+/**
+ * Text as a notification can draw it. The app skips characters its font
+ * cannot show; the system draws a box for them. Same rules as the server's
+ * drawableText (convex/lib/push.ts in the website repo).
+ */
+function drawable(text: string): string {
+  return text
+    .normalize('NFC')
+    .replace(/[\x80-\x9f]/g, (c) => CP1252[c] ?? '')
+    .replace(/[\u2010-\u2012\u2043\u2212\ufe58\ufe63\uff0d]/g, '-')
+    .replace(/(?![\t\n\u200c\u200d\u{e0020}-\u{e007f}])[\p{Cc}\p{Cf}\p{Co}]/gu, '');
+}
+
 function nameOf(address: string): string {
   const m = address.match(/^(.+?)\s*<([^>]+)>$/);
   return m ? m[1].trim().replace(/^["']|["']$/g, '') : address.replace(/[<>]/g, '');
@@ -131,8 +155,8 @@ export async function checkMail(query: Query, options: { silent: boolean; prefs:
     newMail.sort((a, b) => b._creationTime - a._creationTime);
     for (const e of newMail.slice(0, MAX_MAIL_NOTIFICATIONS)) {
       out.push({
-        title: nameOf(e.from),
-        body: e.subject || '(no subject)',
+        title: drawable(nameOf(e.from)),
+        body: drawable(e.subject) || '(no subject)',
         data: { url: emailPath(e), emailId: e._id, mailboxId: e.mailboxId, folder: e.folder, type: 'new_mail' },
         channelId: CHANNELS.mail,
         categoryIdentifier: CATEGORIES.email,
@@ -142,7 +166,7 @@ export async function checkMail(query: Query, options: { silent: boolean; prefs:
     if (rest.length > 0) {
       out.push({
         title: `${rest.length} more new message${rest.length === 1 ? '' : 's'}`,
-        body: rest.slice(0, 3).map((e) => `${nameOf(e.from)}: ${e.subject}`).join('\n'),
+        body: rest.slice(0, 3).map((e) => drawable(`${nameOf(e.from)}: ${e.subject}`)).join('\n'),
         data: { url: `/mailbox/${rest[0].mailboxId}`, type: 'new_mail' },
         channelId: CHANNELS.mail,
       });
@@ -162,14 +186,14 @@ export async function checkMail(query: Query, options: { silent: boolean; prefs:
         first.batchId
           ? {
               title: 'Delivery problems in a campaign',
-              body: `${group.length} message${group.length === 1 ? '' : 's'} in “${first.subject}” ${group.length === 1 ? what : 'did not arrive'}.`,
+              body: `${group.length} message${group.length === 1 ? '' : 's'} in “${drawable(first.subject)}” ${group.length === 1 ? what : 'did not arrive'}.`,
               data: { url: `/campaign/${encodeURIComponent(key)}`, batchId: key, type: 'delivery_issue' },
               channelId: CHANNELS.campaigns,
               categoryIdentifier: CATEGORIES.campaign,
             }
           : {
               title: `Your email ${what}`,
-              body: `To ${first.to.join(', ')}: ${first.subject}`,
+              body: `To ${first.to.join(', ')}: ${drawable(first.subject)}`,
               data: { url: emailPath(first), emailId: first._id, mailboxId: first.mailboxId, folder: first.folder, type: 'bounce' },
               channelId: CHANNELS.campaigns,
             },
