@@ -10,6 +10,7 @@ import { ConnectionBanner } from '@/components/feedback/connection-banner';
 import { Colors } from '@/constants/theme';
 import { ConnectingScreen, useClerkFailed } from '@/features/auth/connecting-screen';
 import { useSession } from '@/features/auth/session';
+import { PendingChangesSync } from '@/features/mail/pending-changes-sync';
 import { NotificationObserver } from '@/features/notifications/notification-observer';
 import { AppLockGate } from '@/features/settings/app-lock';
 import { ConfigMissingScreen } from '@/features/settings/config-missing';
@@ -78,6 +79,7 @@ export default function RootLayout() {
               <AppProviders>
                 <WorkspaceProvider>
                   <RootNavigator />
+                  <PendingChangesSync />
                   <NotificationObserver />
                   <ConnectionBanner />
                   <AppLockGate />

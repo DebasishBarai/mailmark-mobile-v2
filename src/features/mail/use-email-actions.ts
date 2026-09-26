@@ -12,18 +12,17 @@ import type { Email } from '@/lib/convex/types';
 import { rawEmail } from '@/lib/email/address';
 import { haptic } from '@/lib/haptics';
 
+import { queueMailChange } from './pending-changes';
+
 /**
  * Everything a person can do to a message from a list row, a swipe or the
- * reader, over the same mutations the website calls. Mutations are
- * reactive: the list re-renders from the server once each one lands.
+ * reader, over the same mutations the website calls. Read, star and move go
+ * through the pending-change queue (pending-changes.ts): they show at once
+ * and reach the server when a connection allows, offline included.
  */
 export function useEmailActions() {
   const toast = useToast();
   const sheet = useActionSheet();
-  const moveToFolder = useMutation(api.emails.moveToFolder);
-  const markAsRead = useMutation(api.emails.markAsRead);
-  const markAsUnread = useMutation(api.emails.markAsUnread);
-  const toggleStarMutation = useMutation(api.emails.toggleStar);
   const cancelScheduled = useMutation(api.emails.cancelScheduledEmail);
 
   const fail = useCallback(
@@ -37,58 +36,30 @@ export function useEmailActions() {
   const trash = useCallback(
     async (email: Email) => {
       const from = email.folder;
-      try {
-        await moveToFolder({ emailId: email._id, folder: 'trash' });
-        toast.show({
-          message: 'Moved to Trash',
-          icon: 'trash',
-          action: {
-            label: 'Undo',
-            onPress: () => {
-              moveToFolder({ emailId: email._id, folder: from }).catch((err) => fail(err, 'Could not undo.'));
-            },
-          },
-        });
-      } catch (err) {
-        fail(err, 'Could not move this message.');
-      }
+      await queueMailChange(email, { folder: 'trash' });
+      toast.show({
+        message: 'Moved to Trash',
+        icon: 'trash',
+        action: {
+          label: 'Undo',
+          onPress: () => void queueMailChange({ ...email, folder: 'trash' }, { folder: from }),
+        },
+      });
     },
-    [moveToFolder, toast, fail],
+    [toast],
   );
 
   const restore = useCallback(
     async (email: Email) => {
-      try {
-        await moveToFolder({ emailId: email._id, folder: 'inbox' });
-        toast.show({ message: 'Moved to Inbox', icon: 'inbox' });
-      } catch (err) {
-        fail(err, 'Could not restore this message.');
-      }
+      await queueMailChange(email, { folder: 'inbox' });
+      toast.show({ message: 'Moved to Inbox', icon: 'inbox' });
     },
-    [moveToFolder, toast, fail],
+    [toast],
   );
 
-  const setRead = useCallback(
-    async (email: Email, read: boolean) => {
-      try {
-        await (read ? markAsRead : markAsUnread)({ emailId: email._id });
-      } catch (err) {
-        fail(err, 'Could not update this message.');
-      }
-    },
-    [markAsRead, markAsUnread, fail],
-  );
+  const setRead = useCallback((email: Email, read: boolean) => queueMailChange(email, { read }), []);
 
-  const toggleStar = useCallback(
-    async (email: Email) => {
-      try {
-        await toggleStarMutation({ emailId: email._id });
-      } catch (err) {
-        fail(err, 'Could not update this message.');
-      }
-    },
-    [toggleStarMutation, fail],
-  );
+  const toggleStar = useCallback((email: Email) => queueMailChange(email, { starred: !email.starred }), []);
 
   const cancelSchedule = useCallback(
     (email: Email, onDone?: () => void) => {

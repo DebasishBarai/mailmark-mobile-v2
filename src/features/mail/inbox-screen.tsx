@@ -30,6 +30,7 @@ import { haptic } from '@/lib/haptics';
 import { BatchRow } from './batch-row';
 import { EmailRow } from './email-row';
 import { FOLDERS, folderLabel, type MailFolder } from './folders';
+import { usePendingChanges, withPending } from './pending-changes';
 import { emailHref } from './use-email';
 import { useEmailActions } from './use-email-actions';
 import { useNameMaps } from './use-names';
@@ -212,8 +213,14 @@ function MailList({
 }) {
   const theme = useTheme();
   const list = useLivePaginated(api.emails.listByFolderPaginated, { mailboxId: mailbox._id, folder }, PAGE);
+  const pending = usePendingChanges();
+  // Changes not yet on the server, shown already; a message moved away leaves.
+  const emails = useMemo(
+    () => list.items.map((e) => withPending(e, pending)).filter((e) => e.folder === folder),
+    [list.items, pending, folder],
+  );
   const drafts = useLocalDrafts(folder === 'drafts' ? mailbox._id : '__none__');
-  const names = useNameMaps(list.items);
+  const names = useNameMaps(emails);
   const actions = useEmailActions();
 
   const items = useMemo<Item[]>(() => {
@@ -236,7 +243,7 @@ function MailList({
     if (folder === 'sent' || folder === 'outbox') {
       const groups = new Map<string, Email[]>();
       const order: string[] = [];
-      for (const e of list.items) {
+      for (const e of emails) {
         const k = e.batchId ?? `solo-${e._id}`;
         if (!groups.has(k)) {
           groups.set(k, []);
@@ -251,10 +258,10 @@ function MailList({
         else for (const e of group) out.push({ kind: 'email', key: e._id, email: e });
       }
     } else {
-      for (const e of list.items) if (matches(e)) out.push({ kind: 'email', key: e._id, email: e });
+      for (const e of emails) if (matches(e)) out.push({ kind: 'email', key: e._id, email: e });
     }
     return out;
-  }, [list.items, drafts, folder, search]);
+  }, [emails, drafts, folder, search]);
 
   const openEmail = useCallback((email: Email) => {
     haptic('selection');

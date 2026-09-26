@@ -104,4 +104,4 @@ same way the website does (for example, mailboxes per domain with
 | Deep links | `mailmark://email/{id}?mailbox=&folder=`, `thread`, `campaign`, `sequence`, `mailbox`, `domain`; website URLs via `+native-intent.tsx` | None (universal links additionally need AASA / assetlinks files on the website) |
 | App lock | Face ID / Touch ID / fingerprint / passcode on launch and resume | None |
 | Haptics, share sheet, clipboard | Throughout | None |
-| Offline banner, queued mutations | Convex connection state | None |
+| Offline banner, queued mutations | Convex connection state; read, star, trash and restore saved on the device while offline and sent on reconnect (`pending-changes.ts`) | None |
