@@ -26,9 +26,9 @@ export const CATEGORIES = {
 } as const;
 
 export const ACTIONS = {
-  open: 'open',
-  reply: 'reply',
   markRead: 'mark_read',
+  reply: 'reply',
+  trash: 'trash',
   view: 'view',
 } as const;
 
@@ -77,10 +77,12 @@ export async function configureNotifications() {
     });
   }
 
+  // Tapping the notification itself opens the email, so its buttons are the
+  // quick actions. Android shows at most three.
   await Notifications.setNotificationCategoryAsync(CATEGORIES.email, [
-    { identifier: ACTIONS.open, buttonTitle: 'Open', options: { opensAppToForeground: true } },
     { identifier: ACTIONS.markRead, buttonTitle: 'Mark as read', options: { opensAppToForeground: false } },
     { identifier: ACTIONS.reply, buttonTitle: 'Reply', options: { opensAppToForeground: true } },
+    { identifier: ACTIONS.trash, buttonTitle: 'Trash', options: { opensAppToForeground: false, isDestructive: true } },
   ]);
   await Notifications.setNotificationCategoryAsync(CATEGORIES.campaign, [
     { identifier: ACTIONS.view, buttonTitle: 'View campaign', options: { opensAppToForeground: true } },
