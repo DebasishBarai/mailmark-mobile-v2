@@ -139,13 +139,13 @@ password, codes, MFA, passkeys, SSO) works without the app implementing each.
   never announced twice.
 - Each new email gets its own notification (the server and the fallback both
   send the newest five and sum up the rest in one) with Mark as read, Reply and
-  Trash buttons; tapping the notification itself opens the email.
+  Open buttons.
 - While the app is open, `NotificationObserver` records what the user has seen
-  (so it is never announced later), routes taps and the Reply action, and
-  mirrors total unread onto the app icon badge.
-- Mark as read and Trash do not open the app, so `background-check.ts` handles
-  them at module scope with the stored Clerk session and a Convex HTTP client:
-  through the response listener on iOS and a `registerTaskAsync` notification task on
+  (so it is never announced later), routes taps and the Open and Reply
+  actions, and mirrors total unread onto the app icon badge.
+- Mark as read does not open the app, so `background-check.ts` handles it at
+  module scope with the stored Clerk session and a Convex HTTP client: through
+  the response listener on iOS and a `registerTaskAsync` notification task on
   Android, where a background action only reaches that task.
 - Notification data carries an in-app path in `data.url`; only paths matching
   app routes are followed (`safeAppPath`).

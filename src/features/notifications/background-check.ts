@@ -68,34 +68,28 @@ TaskManager.defineTask(MAIL_CHECK_TASK, async () => {
   }
 });
 
-/** Buttons that act on the email without opening the app. */
-const BACKGROUND_ACTIONS: string[] = [ACTIONS.markRead, ACTIONS.trash];
-const handled = new Set<string>();
+const markedRead = new Set<string>();
 
 /**
- * The Mark as read and Trash buttons. They do not open the app, so they cannot
- * rely on the React tree being mounted or signed in: they use the stored Clerk
- * session and an HTTP client, like the background check. A notification is
- * handled once even if both the listener and the Android task report it.
+ * The Mark as read button. It does not open the app, so it cannot rely on the
+ * React tree being mounted or signed in: it uses the stored Clerk session and
+ * an HTTP client, like the background check. A notification is handled once
+ * even if both the listener and the Android task report it.
  */
-async function handleBackgroundAction(response: Notifications.NotificationResponse) {
+async function markReadFromNotification(response: Notifications.NotificationResponse) {
   const { identifier, content } = response.notification.request;
   const data = (content.data ?? {}) as PushData;
-  const action = response.actionIdentifier;
-  if (!BACKGROUND_ACTIONS.includes(action) || !data.emailId || handled.has(identifier)) return;
-  handled.add(identifier);
+  if (response.actionIdentifier !== ACTIONS.markRead || !data.emailId || markedRead.has(identifier)) return;
+  markedRead.add(identifier);
   try {
     const client = await authenticatedClient();
     if (!client) return;
-    const emailId = data.emailId as Id<'emails'>;
-    if (action === ACTIONS.trash) await client.mutation(api.emails.moveToFolder, { emailId, folder: 'trash' });
-    else await client.mutation(api.emails.markAsRead, { emailId });
+    await client.mutation(api.emails.markAsRead, { emailId: data.emailId as Id<'emails'> });
     await Notifications.dismissNotificationAsync(identifier);
-    // Either way the message no longer counts as unread in the inbox.
     const badge = await Notifications.getBadgeCountAsync();
     if (badge > 0) await Notifications.setBadgeCountAsync(badge - 1);
   } catch {
-    handled.delete(identifier);
+    markedRead.delete(identifier);
   }
 }
 
@@ -104,16 +98,16 @@ async function handleBackgroundAction(response: Notifications.NotificationRespon
  * delivered only to this task; on iOS it reaches the response listener below.
  */
 TaskManager.defineTask<Notifications.NotificationTaskPayload>(NOTIFICATION_ACTION_TASK, async ({ data }) => {
-  if (data && 'actionIdentifier' in data) await handleBackgroundAction(data);
+  if (data && 'actionIdentifier' in data) await markReadFromNotification(data);
 });
 
 if (Platform.OS !== 'web') {
-  Notifications.addNotificationResponseReceivedListener((response) => void handleBackgroundAction(response));
+  Notifications.addNotificationResponseReceivedListener((response) => void markReadFromNotification(response));
   // The button that launched the app from a closed state. Cleared so it is not
-  // replayed later on an email the user has since changed.
+  // replayed later on an email the user has since marked unread.
   const initial = Notifications.getLastNotificationResponse();
-  if (initial && BACKGROUND_ACTIONS.includes(initial.actionIdentifier)) {
-    void handleBackgroundAction(initial);
+  if (initial?.actionIdentifier === ACTIONS.markRead) {
+    void markReadFromNotification(initial);
     void Notifications.clearLastNotificationResponseAsync();
   }
   if (Platform.OS === 'android') Notifications.registerTaskAsync(NOTIFICATION_ACTION_TASK).catch(() => {});

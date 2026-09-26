@@ -9,14 +9,14 @@ import { useWorkspace } from '@/features/workspace/workspace';
 
 // Importing this module (through delivery.ts) defines the background tasks
 // at startup, which the OS requires before it can run them, and handles
-// Mark as read and Trash.
+// Mark as read.
 import { retryForgottenTokens, stopDelivery, syncDelivery } from './delivery';
 import { checkMail, clearNotifyState, convexQuery, loadNotifyPrefs } from './mail-check';
 import { ACTIONS, configureNotifications, safeAppPath, storedPushToken, type PushData } from './push';
 
 /**
  * Registers this device for push (or the background check where push is
- * unavailable), routes notification taps and the Reply action into
+ * unavailable), routes notification taps and the Open and Reply actions into
  * the app, keeps the background check's "seen" marker current while the app
  * is open, and mirrors the unread count onto the app icon badge. Renders
  * nothing.
@@ -93,7 +93,7 @@ function Observer() {
       const action = response.actionIdentifier;
 
       // Handled in background-check.ts, which works without the app open.
-      if (action === ACTIONS.markRead || action === ACTIONS.trash) return;
+      if (action === ACTIONS.markRead) return;
       if (action === ACTIONS.reply && data.emailId) {
         router.push({
           pathname: '/compose',
