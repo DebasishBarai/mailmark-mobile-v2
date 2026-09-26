@@ -78,6 +78,16 @@ with the right screen underneath and a working back button.
   server's result arrives through the live queries. Errors are turned into the
   sentence the server wrote (`errorMessage`), the same way the website reads
   `ConvexError` data.
+- The exception is changes to a message (read, unread, star, trash, restore),
+  which work offline: they go through a queue kept in AsyncStorage
+  (`features/mail/pending-changes.ts`), show at once (lists, the reader and
+  unread counts lay pending changes over the server's data) and are sent in
+  order by `PendingChangesSync` when the socket connects, on return to the
+  app, and from the background check or a notification button with an HTTP
+  client. Repeated changes to one message coalesce. The backend only toggles
+  a star, so the queue keeps the server's value and toggles only when it
+  differs. A change the server refuses is dropped with a toast; the queue is
+  cleared on sign-out.
 - Account-wide state (mailboxes, domains, selected mailbox and folder, unread
   counts) lives in `WorkspaceProvider`; the campaign index lives in a provider
   on the Campaigns stack.
@@ -112,7 +122,7 @@ password, codes, MFA, passkeys, SSO) works without the app implementing each.
 | --- | --- |
 | Clerk session token | expo-secure-store (Keychain / Keystore) via `@clerk/expo/token-cache` |
 | App-lock flag | expo-secure-store |
-| Theme and other preferences, last mailbox, local drafts | AsyncStorage |
+| Theme and other preferences, last mailbox, local drafts, mail changes not yet sent | AsyncStorage |
 | API keys | Never persisted; shown once, kept in screen memory |
 | Attachment downloads | Cache directory, handed to the share sheet |
 
@@ -153,12 +163,8 @@ password, codes, MFA, passkeys, SSO) works without the app implementing each.
 - Mark as read does not open the app, so `background-check.ts` handles it at
   module scope with the stored Clerk session and a Convex HTTP client: through
   the response listener on iOS and a `registerTaskAsync` notification task on
-  Android, where a background action only reaches that task. The tap is
-  saved on the device (`pending-reads.ts`) and the notification dismissed at
-  once, so it works offline: the call is sent then, and retried on launch, on
-  return to the app, when the network comes back and on each background
-  check. A tap the server refuses (the email was deleted) is dropped; the
-  queue is cleared on sign-out.
+  Android, where a background action only reaches that task. It queues the
+  change like any in-app action (below), so it works offline.
 - Notification data carries an in-app path in `data.url`; only paths matching
   app routes are followed (`safeAppPath`).
 - `+native-intent.tsx` maps `mailmark://` links and website URLs

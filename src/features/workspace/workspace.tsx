@@ -3,6 +3,7 @@ import { createContext, use, useCallback, useEffect, useMemo, useState, type Rea
 
 import { useSession } from '@/features/auth/session';
 import type { MailFolder } from '@/features/mail/folders';
+import { unreadDelta, usePendingChanges } from '@/features/mail/pending-changes';
 import { api } from '@/lib/convex/api';
 import { useLiveQuery, type LiveQuery } from '@/lib/convex/hooks';
 import type { Domain, Id, Mailbox } from '@/lib/convex/types';
@@ -103,7 +104,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const unreadSignature = JSON.stringify(
     Object.fromEntries(Object.entries(unreadResults).map(([id, v]) => [id, typeof v === 'number' ? v : 0])),
   );
-  const unreadByMailbox = useMemo(() => JSON.parse(unreadSignature) as Record<string, number>, [unreadSignature]);
+  // Read and move changes not yet on the server count already.
+  const pending = usePendingChanges();
+  const unreadByMailbox = useMemo(() => {
+    const counts = JSON.parse(unreadSignature) as Record<string, number>;
+    for (const [id, d] of Object.entries(unreadDelta(pending))) {
+      if (id in counts) counts[id] = Math.max(0, counts[id] + d);
+    }
+    return counts;
+  }, [unreadSignature, pending]);
   const totalUnread = Object.values(unreadByMailbox).reduce((a, b) => a + b, 0);
 
   const domainFor = useCallback(

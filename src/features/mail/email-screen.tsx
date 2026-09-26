@@ -1,4 +1,3 @@
-import { useMutation } from 'convex/react';
 import { Stack, router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
@@ -9,7 +8,6 @@ import { Avatar, Badge, Button, ErrorState, Icon, IconButton, LoadingState, Skel
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { usePreferences } from '@/features/settings/preferences';
 import { useTheme } from '@/hooks/use-theme';
-import { api } from '@/lib/convex/api';
 import { useRefreshKey } from '@/lib/convex/hooks';
 import type { Email } from '@/lib/convex/types';
 import { displayName, rawEmail, type NameMaps } from '@/lib/email/address';
@@ -22,6 +20,7 @@ import { ConversationList, useConversation } from './conversation';
 import { DeliveryPanel } from './delivery-panel';
 import { EmailBodyView } from './email-body-view';
 import { folderLabel } from './folders';
+import { queueMailChange, usePendingChanges, withPending } from './pending-changes';
 import { useEmailActions } from './use-email-actions';
 import { useEmail, type EmailLocation } from './use-email';
 import { useEmailBody } from './use-email-body';
@@ -34,6 +33,7 @@ export function EmailScreen({ id, location }: { id: string; location: EmailLocat
 
 function EmailScreenBody({ id, location, onRetry }: { id: string; location: EmailLocation; onRetry: () => void }) {
   const email = useEmail(id, location);
+  const pending = usePendingChanges();
 
   if (email.status === 'loading') return <LoadingState />;
   if (email.status === 'error') return <ErrorState error={email.error} onRetry={onRetry} />;
@@ -46,7 +46,7 @@ function EmailScreenBody({ id, location, onRetry }: { id: string; location: Emai
       />
     );
   }
-  return <Reader email={email.data} />;
+  return <Reader email={withPending(email.data, pending)} />;
 }
 
 function Reader({ email }: { email: Email }) {
@@ -54,7 +54,6 @@ function Reader({ email }: { email: Email }) {
   const insets = useSafeAreaInsets();
   const { prefs } = usePreferences();
   const actions = useEmailActions();
-  const markAsRead = useMutation(api.emails.markAsRead);
   const body = useEmailBody(email);
   const names = useNameMaps([email]);
   const conversation = useConversation(email);
@@ -65,11 +64,9 @@ function Reader({ email }: { email: Email }) {
   useEffect(() => {
     if (!email.read && email.folder === 'inbox' && !marked.current) {
       marked.current = true;
-      markAsRead({ emailId: email._id }).catch(() => {
-        marked.current = false;
-      });
+      void queueMailChange(email, { read: true });
     }
-  }, [email._id, email.read, email.folder, markAsRead]);
+  }, [email]);
 
   const outgoing = email.folder === 'sent' || email.folder === 'outbox';
   const canReply = email.folder !== 'outbox' && email.folder !== 'drafts';

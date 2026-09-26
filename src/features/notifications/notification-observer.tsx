@@ -1,5 +1,4 @@
 import { useConvex } from 'convex/react';
-import * as Network from 'expo-network';
 import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
@@ -11,10 +10,8 @@ import { useWorkspace } from '@/features/workspace/workspace';
 // Importing this module (through delivery.ts) defines the background tasks
 // at startup, which the OS requires before it can run them, and handles
 // Mark as read.
-import { sendPendingReads } from './background-check';
 import { retryForgottenTokens, stopDelivery, syncDelivery } from './delivery';
 import { checkMail, clearNotifyState, convexQuery, loadNotifyPrefs } from './mail-check';
-import { clearPendingReads } from './pending-reads';
 import { ACTIONS, configureNotifications, safeAppPath, storedPushToken, type PushData } from './push';
 
 /**
@@ -44,7 +41,6 @@ function Observer() {
       registerSignOutHook(async () => {
         await stopDelivery(convex);
         await clearNotifyState();
-        await clearPendingReads();
         await Notifications.setBadgeCountAsync(0);
       }),
     [registerSignOutHook, convex],
@@ -59,23 +55,6 @@ function Observer() {
     });
     return () => sub.remove();
   }, [convex]);
-
-  // Mark as read taps made offline, sent on launch, on every return to the
-  // app and whenever the connection comes back.
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    void sendPendingReads();
-    const app = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void sendPendingReads();
-    });
-    const network = Network.addNetworkStateListener(({ isConnected, isInternetReachable }) => {
-      if (isConnected && isInternetReachable !== false) void sendPendingReads();
-    });
-    return () => {
-      app.remove();
-      network.remove();
-    };
-  }, [isAuthenticated]);
 
   // Register with the server on every launch: it re-creates a token the
   // server dropped, and applies preferences a failed call left behind. A
