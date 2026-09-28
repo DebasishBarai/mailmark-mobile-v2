@@ -3,15 +3,17 @@ import { useMemo, useRef, useState } from 'react';
 import { StyleSheet, Switch, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
-import { useActionSheet } from '@/components/feedback/action-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { Card, Chip, IconButton, Segmented } from '@/components/ui';
 import { Fonts, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { EmailBodyView } from '@/features/mail/email-body-view';
 import { useWorkspace } from '@/features/workspace/workspace';
+import { ComposeBodyEditor, type ComposeBodyEditorHandle } from '@/features/compose/compose-body-editor';
+import { useFormatChooser } from '@/features/compose/use-format-chooser';
 import { useTheme } from '@/hooks/use-theme';
 import { buildBody } from '@/lib/email/compose';
-import { extractMergeFields, resolveMergeFields } from '@/lib/merge-fields';
+import { FORMAT_LABELS } from '@/lib/email/format';
+import { escapesMergeValues, extractMergeFields, resolveMergeFields } from '@/lib/merge-fields';
 
 import { useCampaignDraft } from './draft';
 import { StepFooter } from './step-footer';
@@ -20,17 +22,14 @@ type Target = 'subject' | 'body';
 
 export function ContentScreen() {
   const theme = useTheme();
-  const sheet = useActionSheet();
   const { draft, update } = useCampaignDraft();
   const { mailboxes } = useWorkspace();
   const mailbox = mailboxes.data?.find((m) => m._id === draft.mailboxId);
   const [tab, setTab] = useState<'write' | 'preview'>('write');
   const [previewIndex, setPreviewIndex] = useState(0);
   const target = useRef<Target>('body');
-  const selection = useRef<Record<Target, { start: number; end: number }>>({
-    subject: { start: 0, end: 0 },
-    body: { start: 0, end: 0 },
-  });
+  const subjectSelection = useRef({ start: 0, end: 0 });
+  const bodyEditor = useRef<ComposeBodyEditorHandle>(null);
 
   const fields = draft.columns.length > 0 ? draft.columns : ['email'];
   const used = useMemo(() => extractMergeFields(draft.subject + draft.body), [draft.subject, draft.body]);
@@ -38,12 +37,14 @@ export function ContentScreen() {
 
   const insert = (field: string) => {
     const tag = `{${field}}`;
-    const key = target.current;
-    const value = key === 'subject' ? draft.subject : draft.body;
-    const { start, end } = selection.current[key];
-    const next = value.slice(0, start) + tag + value.slice(end);
-    update(key === 'subject' ? { subject: next } : { body: next });
-    selection.current[key] = { start: start + tag.length, end: start + tag.length };
+    if (target.current === 'body') {
+      // The body editor knows its own caret, in rich text and source alike.
+      bodyEditor.current?.insertText(tag);
+      return;
+    }
+    const { start, end } = subjectSelection.current;
+    update({ subject: draft.subject.slice(0, start) + tag + draft.subject.slice(end) });
+    subjectSelection.current = { start: start + tag.length, end: start + tag.length };
   };
 
   const recipient = draft.recipients[Math.min(previewIndex, draft.recipients.length - 1)];
@@ -54,18 +55,15 @@ export function ContentScreen() {
       contentType: draft.contentType,
       signature: draft.includeSignature ? mailbox?.signature : undefined,
     });
-    return recipient ? resolveMergeFields(html, recipient.fields, { escapeValues: draft.contentType === 'plain' }) : html;
+    return recipient ? resolveMergeFields(html, recipient.fields, { escapeValues: escapesMergeValues(draft.contentType) }) : html;
   }, [draft.body, draft.contentType, draft.includeSignature, mailbox?.signature, recipient]);
 
-  const chooseFormat = () =>
-    sheet.show({
-      title: 'Message format',
-      options: [
-        { label: 'Plain text', icon: 'file', onPress: () => update({ contentType: 'plain' }) },
-        { label: 'Markdown', icon: 'merge', onPress: () => update({ contentType: 'markdown' }) },
-        { label: 'HTML', icon: 'code', onPress: () => update({ contentType: 'html' }) },
-      ],
-    });
+  const showFormats = useFormatChooser({
+    format: draft.contentType,
+    body: draft.body,
+    onSwitch: (contentType, body) => update({ contentType, body }),
+  });
+  const chooseFormat = () => showFormats();
 
   return (
     <View style={styles.root}>
@@ -104,7 +102,7 @@ export function ContentScreen() {
                 value={draft.subject}
                 onChangeText={(subject) => update({ subject })}
                 onFocus={() => (target.current = 'subject')}
-                onSelectionChange={(e) => (selection.current.subject = e.nativeEvent.selection)}
+                onSelectionChange={(e) => (subjectSelection.current = e.nativeEvent.selection)}
                 placeholder="Subject"
                 placeholderTextColor={theme.textMuted}
                 accessibilityLabel="Subject"
@@ -112,32 +110,19 @@ export function ContentScreen() {
               />
               <View style={styles.formatRow}>
                 <Chip
-                  label={draft.contentType === 'plain' ? 'Plain text' : draft.contentType === 'markdown' ? 'Markdown' : 'HTML'}
+                  label={FORMAT_LABELS[draft.contentType]}
                   icon="code"
                   onPress={chooseFormat}
                 />
               </View>
-              <TextInput
+              <ComposeBodyEditor
+                ref={bodyEditor}
+                format={draft.contentType}
                 value={draft.body}
-                onChangeText={(body) => update({ body })}
+                onChange={(body) => update({ body })}
                 onFocus={() => (target.current = 'body')}
-                onSelectionChange={(e) => (selection.current.body = e.nativeEvent.selection)}
-                multiline
-                scrollEnabled={false}
-                textAlignVertical="top"
                 placeholder={`Hi {${fields.find((f) => /first|name/i.test(f)) ?? fields[0]}},\n\n…`}
-                placeholderTextColor={theme.textMuted}
-                accessibilityLabel="Message body"
-                autoCapitalize={draft.contentType === 'html' ? 'none' : 'sentences'}
-                style={[
-                  styles.body,
-                  {
-                    color: theme.text,
-                    borderColor: theme.border,
-                    backgroundColor: theme.inputBackground,
-                    fontFamily: draft.contentType === 'plain' ? Fonts.sans : Fonts.mono,
-                  },
-                ]}
+                inputStyle={[styles.body, { borderColor: theme.border, backgroundColor: theme.inputBackground }]}
               />
               {mailbox?.signature ? (
                 <Card style={styles.option}>

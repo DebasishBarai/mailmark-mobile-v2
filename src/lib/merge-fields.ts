@@ -23,6 +23,15 @@ export function resolveMergeFields(
   });
 }
 
+/**
+ * Whether substituted values must be HTML-escaped: in plain text the body is
+ * escaped, and rich text is HTML whose text is already escaped, so a value
+ * containing "<" would otherwise become live markup. Matches the website.
+ */
+export function escapesMergeValues(contentType: string): boolean {
+  return contentType === 'plain' || contentType === 'rich';
+}
+
 export function extractMergeFields(template: string): string[] {
   const regex = /\{([^{}|]+?)(?:\|[^{}]*?)?\}/g;
   const fields = new Set<string>();

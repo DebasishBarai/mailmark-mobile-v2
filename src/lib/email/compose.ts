@@ -4,8 +4,10 @@ import { escapeHtml } from '@/lib/merge-fields';
 import type { Email } from '@/lib/convex/types';
 
 import { rawEmail } from './address';
+import type { ComposeFormat } from './format';
 
-export type ContentType = 'plain' | 'markdown' | 'html';
+// "rich" is the WYSIWYG editor; its body is already HTML.
+export type ContentType = ComposeFormat;
 
 /**
  * Build the HTML body the backend sends, exactly as the website's
@@ -21,7 +23,7 @@ export function buildBody(options: {
   const { body, contentType, signature, quote } = options;
   let html: string;
   if (contentType === 'markdown') html = marked.parse(body, { async: false }) as string;
-  else if (contentType === 'html') html = body;
+  else if (contentType === 'html' || contentType === 'rich') html = body;
   else html = escapeHtml(body).replace(/\n/g, '<br>');
 
   const signaturePart = signature?.trim() ? `<br><br>-- <br>${marked.parse(signature, { async: false }) as string}` : '';

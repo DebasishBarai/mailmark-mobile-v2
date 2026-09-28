@@ -26,7 +26,9 @@ same way the website does (for example, mailboxes per domain with
 | Delivery tracking | Tick icons | fields on `emails` | Delivery timeline: sent → delivered → opened → clicked links → replied, or bounce/complaint/block detail | None |
 | Threads | Not on web | `emails.listByFolderPaginated` | Conversation assembled from recent inbox+sent with the same subject and a shared participant | None (documented limitation) |
 | Compose, To/Cc/Bcc | Compose panel | `ses.sendEmail` | Token recipient fields, contact suggestions, verification verdicts on chips | None |
-| Plain / Markdown / HTML, preview | Yes | client (`marked`) | Same `buildBody` as web, rendered preview | None |
+| Rich text / Plain / Markdown / HTML, preview | Yes; Rich text default | client (`marked`) | Same `buildBody` as web, rendered preview; rich text in a web view editor (iframe on web) | None |
+| Formatting toolbar and shortcuts | Font, size, bold, italic, underline, strike, color, lists, link, clear; Ctrl/Cmd+B, I, U, K | client | Same toolbar; in Markdown/HTML it edits the source (`**`, `<b>`); shortcuts with a hardware keyboard | None |
+| Format switching converts the body | Yes (bold → `**` / `<b>`), exact restore when switching straight back | client | Same conversions as web (`lib/email/format.ts`, htmlparser2 instead of the browser DOM) | None |
 | Signature | Mailbox signature | `mailboxes.updateSignature` | Toggle per message; Markdown editor with preview | None |
 | Reply, Reply all, Forward | Yes | client | Same quoting and reply-all de-duplication as web | None |
 | Attachments (send) | File input | `ses.sendEmail` | Files, photo library, camera; size budget shown | None |

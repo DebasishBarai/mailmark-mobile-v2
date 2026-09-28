@@ -4,7 +4,7 @@ import type { api } from '@/lib/convex/api';
 import { errorMessage } from '@/lib/convex/errors';
 import type { Id, Mailbox, SequenceStep } from '@/lib/convex/types';
 import { buildBody } from '@/lib/email/compose';
-import { escapeHtml, resolveMergeFields, toSequenceTemplate } from '@/lib/merge-fields';
+import { escapeHtml, escapesMergeValues, resolveMergeFields, toSequenceTemplate } from '@/lib/merge-fields';
 
 import type { CampaignDraft } from './draft';
 
@@ -54,7 +54,7 @@ export async function sendCampaign(
     while (queue.length > 0 && !options.isCancelled()) {
       const recipient = queue.shift()!;
       const subject = resolveMergeFields(draft.subject, recipient.fields);
-      const html = resolveMergeFields(body, recipient.fields, { escapeValues: draft.contentType === 'plain' });
+      const html = resolveMergeFields(body, recipient.fields, { escapeValues: escapesMergeValues(draft.contentType) });
       try {
         if (options.scheduledAt) {
           await actions.scheduleEmail({
