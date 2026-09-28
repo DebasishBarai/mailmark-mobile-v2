@@ -7,9 +7,8 @@ import { AppState, Platform } from 'react-native';
 import { useSession } from '@/features/auth/session';
 import { useWorkspace } from '@/features/workspace/workspace';
 
-// Importing this module (through delivery.ts) defines the background tasks
-// at startup, which the OS requires before it can run them, and handles
-// Mark as read.
+// The background tasks are defined from the app entry (index.ts), which also
+// runs when the OS wakes a closed app without rendering it.
 import { retryForgottenTokens, stopDelivery, syncDelivery } from './delivery';
 import { checkMail, clearNotifyState, convexQuery, loadNotifyPrefs } from './mail-check';
 import { ACTIONS, configureNotifications, safeAppPath, storedPushToken, type PushData } from './push';

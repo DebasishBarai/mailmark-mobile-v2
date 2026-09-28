@@ -165,6 +165,10 @@ password, codes, MFA, passkeys, SSO) works without the app implementing each.
   the response listener on iOS and a `registerTaskAsync` notification task on
   Android, where a background action only reaches that task. It queues the
   change like any in-app action (below), so it works offline.
+- `background-check.ts` is imported from the app entry (`index.ts`), not from
+  a route: when the OS wakes a closed app for a push, a button or the mail
+  check, nothing is rendered, and a task not defined at bundle load is
+  dropped.
 - Notification data carries an in-app path in `data.url`; only paths matching
   app routes are followed (`safeAppPath`).
 - `+native-intent.tsx` maps `mailmark://` links and website URLs
@@ -173,7 +177,7 @@ password, codes, MFA, passkeys, SSO) works without the app implementing each.
 ## Design
 
 The palettes and type come from the boilerplate (Mailmark's own "clean white"
-and "enterprise dark" themes; Schibsted Grotesk, Fraunces, DM Mono). Screens
+"and "enterprise dark" themes; Schibsted Grotesk, Fraunces, DM Mono). Screens
 use native patterns: large-title headers, grouped lists, native search bars,
 form sheets, swipe actions, long-press action sheets (system sheet on iOS),
 toasts with undo, a Material FAB on Android and a header compose button on iOS.
