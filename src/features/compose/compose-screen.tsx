@@ -31,14 +31,17 @@ import {
   replySubject,
   type ContentType,
 } from '@/lib/email/compose';
+import { FORMAT_LABELS } from '@/lib/email/format';
 import { bytes, fullDate } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 
+import { ComposeBodyEditor } from './compose-body-editor';
 import { draftStore, type LocalDraft } from './drafts';
 import { MAX_ATTACHMENT_BYTES, pickFiles, pickPhotos, takePhoto, type PickedAttachment } from './pick-attachments';
 import { RecipientField, type Verification } from './recipient-field';
 import { isInFuture, schedulePresets } from './schedule';
 import { useContactSuggestions } from './use-contact-suggestions';
+import { useFormatChooser } from './use-format-chooser';
 
 type Mode = 'compose' | 'reply' | 'replyAll' | 'forward';
 
@@ -154,7 +157,8 @@ function Composer({
   const [showCcBcc, setShowCcBcc] = useState(initial.cc.length + initial.bcc.length > 0);
   const [subject, setSubject] = useState(initial.subject);
   const [body, setBody] = useState(initial.body);
-  const [contentType, setContentType] = useState<ContentType>(draft?.contentType ?? (serverDraftId ? 'html' : 'plain'));
+  // New messages start in rich text, as on the website; a server draft is HTML.
+  const [contentType, setContentType] = useState<ContentType>(draft?.contentType ?? (serverDraftId ? 'html' : 'rich'));
   const [quote] = useState(draft?.quote ?? initial.quote);
   const [includeQuote, setIncludeQuote] = useState(true);
   const [includeSignature, setIncludeSignature] = useState(true);
@@ -382,17 +386,16 @@ function Composer({
     });
   };
 
-  const chooseFormat = () => {
-    sheet.show({
-      title: 'Message format',
-      message: 'Signatures are always written in Markdown.',
-      options: [
-        { label: 'Plain text', icon: 'file', onPress: () => setContentType('plain') },
-        { label: 'Markdown', icon: 'merge', onPress: () => setContentType('markdown') },
-        { label: 'HTML', icon: 'code', onPress: () => setContentType('html') },
-      ],
-    });
-  };
+  const showFormats = useFormatChooser({
+    format: contentType,
+    body,
+    onSwitch: (next, nextBody) => {
+      setBody(nextBody);
+      setContentType(next);
+      if (next === 'rich' || next === 'plain') setPreview(false);
+    },
+  });
+  const chooseFormat = () => showFormats('Signatures are always written in Markdown.');
 
   const chooseFrom = () => {
     if (mailboxes.length < 2) return;
@@ -524,27 +527,22 @@ function Composer({
           </View>
 
           <View style={styles.formatRow}>
-            <Chip label={contentType === 'plain' ? 'Plain text' : contentType === 'markdown' ? 'Markdown' : 'HTML'} icon="code" onPress={chooseFormat} />
-            {contentType !== 'plain' ? (
+            <Chip label={FORMAT_LABELS[contentType]} icon="code" onPress={chooseFormat} />
+            {/* Rich text is already what the recipient sees, so it needs no preview. */}
+            {contentType === 'markdown' || contentType === 'html' ? (
               <Chip label={preview ? 'Edit' : 'Preview'} icon={preview ? 'pencil' : 'eye'} selected={preview} onPress={() => setPreview((p) => !p)} />
             ) : null}
           </View>
 
-          {preview && contentType !== 'plain' ? (
+          {preview && (contentType === 'markdown' || contentType === 'html') ? (
             <EmailBodyView html={buildBody({ body, contentType })} />
           ) : (
-            <TextInput
+            <ComposeBodyEditor
+              format={contentType}
               value={body}
-              onChangeText={setBody}
-              multiline
-              scrollEnabled={false}
+              onChange={setBody}
               placeholder={contentType === 'markdown' ? 'Write in Markdown…' : contentType === 'html' ? '<p>Write HTML…</p>' : 'Write your message…'}
-              placeholderTextColor={theme.textMuted}
-              accessibilityLabel="Message body"
-              textAlignVertical="top"
-              autoCapitalize={contentType === 'html' ? 'none' : 'sentences'}
-              autoCorrect={contentType !== 'html'}
-              style={[styles.body, { color: theme.text, fontFamily: contentType === 'plain' ? Fonts.sans : Fonts.mono }]}
+              inputStyle={styles.body}
             />
           )}
 

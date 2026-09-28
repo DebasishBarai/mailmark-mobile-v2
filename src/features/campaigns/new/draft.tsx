@@ -30,7 +30,8 @@ const EMPTY: CampaignDraft = {
   sourceLabel: null,
   subject: '',
   body: '',
-  contentType: 'plain',
+  // Rich text by default, as in the website's composer.
+  contentType: 'rich',
   includeSignature: true,
   followUps: [],
 };

@@ -100,6 +100,15 @@ export const Icons = {
   terminal: { ios: 'terminal', android: 'terminal', web: 'terminal' },
   user: { ios: 'person.crop.circle.fill', android: 'account_circle', web: 'account_circle' },
   at: { ios: 'at', android: 'alternate_email', web: 'alternate_email' },
+  bold: { ios: 'bold', android: 'format_bold', web: 'format_bold' },
+  italic: { ios: 'italic', android: 'format_italic', web: 'format_italic' },
+  underline: { ios: 'underline', android: 'format_underlined', web: 'format_underlined' },
+  strikethrough: { ios: 'strikethrough', android: 'format_strikethrough', web: 'format_strikethrough' },
+  listBullet: { ios: 'list.bullet', android: 'format_list_bulleted', web: 'format_list_bulleted' },
+  listNumber: { ios: 'list.number', android: 'format_list_numbered', web: 'format_list_numbered' },
+  font: { ios: 'textformat', android: 'font_download', web: 'font_download' },
+  textSize: { ios: 'textformat.size', android: 'format_size', web: 'format_size' },
+  clearFormat: { ios: 'eraser', android: 'format_clear', web: 'format_clear' },
 } satisfies Record<string, SymbolName>;
 
 export type IconName = keyof typeof Icons;
