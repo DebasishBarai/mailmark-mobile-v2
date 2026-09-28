@@ -177,7 +177,7 @@ password, codes, MFA, passkeys, SSO) works without the app implementing each.
 ## Design
 
 The palettes and type come from the boilerplate (Mailmark's own "clean white"
-"and "enterprise dark" themes; Schibsted Grotesk, Fraunces, DM Mono). Screens
+and "enterprise dark" themes; Schibsted Grotesk, Fraunces, DM Mono). Screens
 use native patterns: large-title headers, grouped lists, native search bars,
 form sheets, swipe actions, long-press action sheets (system sheet on iOS),
 toasts with undo, a Material FAB on Android and a header compose button on iOS.
