@@ -1,6 +1,6 @@
 {
   "name": "mailmark-mobile",
-  "main": "expo-router/entry",
+  "main": "./index.ts",
   "version": "1.0.0",
   "dependencies": {
     "@clerk/expo": "^4.6.9",
