@@ -1,5 +1,5 @@
 import { StyleSheet, View } from 'react-native';
-import Svg, { Circle, ClipPath, Defs, LinearGradient, Line, Polyline, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, ClipPath, Defs, Line, Polyline, Rect } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
 import { Fonts, Spacing } from '@/constants/theme';
@@ -7,21 +7,17 @@ import { useTheme } from '@/hooks/use-theme';
 
 export type LogoMarkProps = {
   size?: number;
-  /** Mailmark's violet identity gradient. Pass a colour to tint the mark instead. */
+  /** Defaults to the theme accent (Mailmark's brand red). Pass a colour to tint the mark instead. */
   color?: string;
 };
 
 export function LogoMark({ size = 32, color }: LogoMarkProps) {
   const theme = useTheme();
-  const stroke = color ?? 'url(#mailmarkLogoGradient)';
+  const stroke = color ?? theme.accent;
 
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100" accessibilityLabel="Mailmark logo">
       <Defs>
-        <LinearGradient id="mailmarkLogoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <Stop offset="0%" stopColor="#8b5cf6" />
-          <Stop offset="100%" stopColor="#5b21b6" />
-        </LinearGradient>
         <ClipPath id="mailmarkLogoClip">
           <Rect x="4" y="16" width="66" height="50" rx="8" />
         </ClipPath>
