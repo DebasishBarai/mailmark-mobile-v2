@@ -2,22 +2,27 @@
  * Wrap a message body in a document for the reader's web view.
  *
  * Mail is authored for a white page, so it is always shown on one, whatever
- * the app theme. Scripts are forbidden by CSP (the reader measures height
- * from the native side, which CSP does not govern). With `blockRemoteImages`
- * only inline and embedded images load, which also stops tracking pixels.
+ * the app theme. The web view reports the app's dark mode to the page, so a
+ * message's own dark-mode rules (light text, meant for a dark background)
+ * are switched off, or they would paint white-on-white. Scripts are forbidden
+ * by CSP (the reader measures height from the native side, which CSP does not
+ * govern). With `blockRemoteImages` only inline and embedded images load,
+ * which also stops tracking pixels.
  */
 export function emailDocument(html: string, options: { blockRemoteImages?: boolean } = {}): string {
   const imgSrc = options.blockRemoteImages ? "img-src data: cid: blob:" : 'img-src * data: cid: blob:';
   const csp = `default-src 'none'; style-src 'unsafe-inline' *; font-src * data:; ${imgSrc}; media-src *; script-src 'none'`;
   const isHtml = /<\s*(html|body|div|p|table|br|span|a|img)\b/i.test(html);
-  const content = isHtml ? html : `<pre style="white-space:pre-wrap;font-family:inherit">${html}</pre>`;
+  const content = isHtml ? withoutDarkMode(html) : `<pre style="white-space:pre-wrap;font-family:inherit">${html}</pre>`;
   return `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
+<meta name="color-scheme" content="light only">
 <style>
+  :root { color-scheme: light only; }
   html, body { margin: 0; padding: 0; background: #ffffff; color: #1a1a1a; }
   body { font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
          padding: 16px; word-wrap: break-word; overflow-wrap: anywhere; -webkit-text-size-adjust: 100%; }
@@ -30,6 +35,18 @@ export function emailDocument(html: string, options: { blockRemoteImages?: boole
 </head>
 <body>${content}</body>
 </html>`;
+}
+
+/**
+ * Make `prefers-color-scheme: dark` queries in the message's stylesheets and
+ * `media` attributes never match. An unknown value is invalid, and an invalid
+ * media query evaluates to false.
+ */
+function withoutDarkMode(html: string): string {
+  const neutralize = (css: string) => css.replace(/prefers-color-scheme\s*:\s*dark/gi, 'prefers-color-scheme: none');
+  return html
+    .replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style\s*>)/gi, (_, open, css, close) => open + neutralize(css) + close)
+    .replace(/(\smedia\s*=\s*)("[^"]*"|'[^']*')/gi, (_, attr, value) => attr + neutralize(value));
 }
 
 /** Injected into the native web view to report the rendered height. */
