@@ -1,5 +1,4 @@
-import { router } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -12,7 +11,8 @@ import type { Email } from '@/lib/convex/types';
 import { displayName, normalizeSubject, rawEmail, type NameMaps } from '@/lib/email/address';
 import { listDate } from '@/lib/format';
 
-import { emailHref } from './use-email';
+import { cachedConversation, rememberConversation } from './email-cache';
+import { openEmail } from './use-email';
 
 const WINDOW = 100;
 
@@ -41,7 +41,16 @@ export function useConversation(email: Email | null | undefined): { messages: Em
       .sort((a, b) => a.date - b.date);
   }, [email, inbox.data, sent.data]);
 
-  return { messages, loading: inbox.status === 'loading' || sent.status === 'loading' };
+  const loading = inbox.status === 'loading' || sent.status === 'loading';
+  const id = email?._id;
+  useEffect(() => {
+    if (id && !loading) rememberConversation(id, messages);
+  }, [id, loading, messages]);
+
+  // Reopened: the conversation as last seen, until the live one arrives.
+  const cached = loading && id ? cachedConversation(id) : undefined;
+  if (cached) return { messages: cached, loading: false };
+  return { messages, loading };
 }
 
 export function ConversationList({ current, messages, loading, names }: { current: Email; messages: Email[]; loading: boolean; names: NameMaps }) {
@@ -71,7 +80,7 @@ export function ConversationList({ current, messages, loading, names }: { curren
             accessibilityRole="button"
             disabled={isCurrent}
             accessibilityLabel={`${outgoing ? 'You' : displayName(m.from, names)}, ${listDate(m.date)}`}
-            onPress={() => router.push(emailHref(m))}
+            onPress={() => openEmail(m)}
             style={({ pressed }) => [
               styles.item,
               {

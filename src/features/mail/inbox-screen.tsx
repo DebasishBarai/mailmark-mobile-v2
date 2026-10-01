@@ -31,7 +31,7 @@ import { BatchRow } from './batch-row';
 import { EmailRow } from './email-row';
 import { FOLDERS, folderLabel, type MailFolder } from './folders';
 import { usePendingChanges, withPending } from './pending-changes';
-import { emailHref } from './use-email';
+import { openEmail as openMessage } from './use-email';
 import { useEmailActions } from './use-email-actions';
 import { useNameMaps } from './use-names';
 
@@ -268,7 +268,7 @@ function MailList({
     if (email.folder === 'drafts') {
       router.push({ pathname: '/compose', params: { mailboxId: email.mailboxId, fromEmailId: email._id, folder: 'drafts' } });
     } else {
-      router.push(emailHref(email));
+      openMessage(email);
     }
   }, []);
 

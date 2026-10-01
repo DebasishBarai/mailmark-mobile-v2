@@ -7,6 +7,8 @@ import { useSession } from '@/features/auth/session';
 import { errorMessage } from '@/lib/convex/errors';
 import { haptic } from '@/lib/haptics';
 
+import { clearEmailCache } from './email-cache';
+import { clearBodyCache } from './use-email-body';
 import { clearMailChanges, flushMailChanges, onMailChangeRejected, setLiveClient } from './pending-changes';
 
 /**
@@ -51,7 +53,15 @@ export function PendingChangesSync() {
     [toast],
   );
 
-  useEffect(() => registerSignOutHook(() => clearMailChanges()), [registerSignOutHook]);
+  useEffect(
+    () =>
+      registerSignOutHook(() => {
+        clearEmailCache();
+        clearBodyCache();
+        return clearMailChanges();
+      }),
+    [registerSignOutHook],
+  );
 
   return null;
 }
