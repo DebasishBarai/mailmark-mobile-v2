@@ -7,6 +7,8 @@ import { isNetworkError } from '@/lib/convex/errors';
 import type { Email, Id } from '@/lib/convex/types';
 import { local } from '@/lib/storage';
 
+import { forgetEmail, patchCachedEmail } from './email-cache';
+
 /**
  * Changes to messages (read, starred, folder) made on this device and not yet
  * confirmed by the server, kept on the device so they survive being offline
@@ -100,6 +102,7 @@ export function queueMailChange(target: MailTarget, change: MailFields): Promise
       if (value === entry.base[field]) delete entry.change[field];
       else (entry.change as Record<Field, unknown>)[field] = value;
     }
+    patchCachedEmail(target._id, change);
     await commit(replace(existing, entry));
   });
   void saved.then(() => flushMailChanges());
@@ -227,6 +230,8 @@ async function drain() {
       // No connection (fetch throws a TypeError): the rest wait for the next try.
       if (error instanceof TypeError || isNetworkError(error)) return;
       await settle(job, false);
+      // The cached copy shows the refused change; load it afresh next time.
+      forgetEmail(job.emailId);
       for (const l of rejectionListeners) l({ emailId: job.emailId, error });
       continue;
     }

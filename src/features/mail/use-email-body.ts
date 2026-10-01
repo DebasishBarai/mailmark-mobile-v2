@@ -67,3 +67,7 @@ export function useEmailBody(email: Email | null | undefined): BodyState & { rel
 export function cachedBody(emailId: string): EmailBody | undefined {
   return cache.get(emailId);
 }
+
+export function clearBodyCache() {
+  cache.clear();
+}
