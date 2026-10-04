@@ -20,7 +20,7 @@ import type { DomainWithRegion, Id } from '@/lib/convex/types';
 import { timeAgo } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 
-import { canRetryMailFrom, dnsRecords, fullHost, zoneFile, type DnsRecord } from './dns';
+import { DNS_RECORD_GROUPS, canRetryMailFrom, dnsRecords, fullHost, zoneFile, type DnsRecord, type DnsRecordGroup } from './dns';
 
 export function DomainScreen({ id }: { id: string }) {
   const { key, refreshing, refresh } = useRefreshKey();
@@ -43,7 +43,10 @@ function DomainDetail({ domain, refreshing, onRefresh }: { domain: DomainWithReg
   const [busy, setBusy] = useState<'verify' | 'retry' | 'remove' | null>(null);
 
   const records = dnsRecords(domain);
-  const done = records.filter((r) => r.verified).length;
+  // Progress counts what the owner should add. The receiving MX is optional, so
+  // counting it would leave an owner who rightly skips it short forever.
+  const tracked = records.filter((r) => r.group !== 'receiving');
+  const done = tracked.filter((r) => r.verified).length;
   const domainMailboxes = (mailboxes.data ?? []).filter((m) => m.domainId === domain._id);
 
   const check = async () => {
@@ -141,12 +144,12 @@ function DomainDetail({ domain, refreshing, onRefresh }: { domain: DomainWithReg
           <View style={styles.flex}>
             <ThemedText type="heading">{domain.verified ? 'Verified' : 'Waiting for DNS'}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              {done} of {records.length} records found
+              {done} of {tracked.length} records found
               {domain.lastVerificationCheckAt ? ` · checked ${timeAgo(domain.lastVerificationCheckAt)}` : ''}
             </ThemedText>
           </View>
         </View>
-        <ProgressBar value={done / records.length} color={domain.verified ? theme.success : theme.accent} />
+        <ProgressBar value={tracked.length ? done / tracked.length : 0} color={domain.verified ? theme.success : theme.accent} />
         {domain.lastVerificationError && !domain.verified ? (
           <ThemedText type="small" themeColor="warning">
             {domain.lastVerificationError}
@@ -154,7 +157,7 @@ function DomainDetail({ domain, refreshing, onRefresh }: { domain: DomainWithReg
         ) : null}
         {!domain.verified ? (
           <ThemedText type="small" themeColor="textSecondary">
-            Add each record below at your DNS provider. Tap a value to copy it. Changes usually appear within minutes but can take up to 48 hours.
+            Add the required records below at your DNS provider first. Tap a value to copy it. Changes usually appear within minutes but can take up to 48 hours.
           </ThemedText>
         ) : null}
         <Button title="Check DNS now" icon="refresh" variant={domain.verified ? 'secondary' : 'primary'} loading={busy === 'verify'} disabled={busy !== null} onPress={check} />
@@ -172,8 +175,15 @@ function DomainDetail({ domain, refreshing, onRefresh }: { domain: DomainWithReg
         <ThemedText type="label" themeColor="textSecondary" style={styles.sectionLabel}>
           DNS records
         </ThemedText>
-        {records.map((r) => (
-          <RecordCard key={r.key} record={r} domain={domain.domain} onCopy={copy} />
+        {DNS_RECORD_GROUPS.map((group) => (
+          <View key={group} style={styles.records}>
+            <GroupIntro group={group} domain={domain} />
+            {records
+              .filter((r) => r.group === group)
+              .map((r) => (
+                <RecordCard key={r.key} record={r} domain={domain.domain} onCopy={copy} />
+              ))}
+          </View>
         ))}
       </View>
 
@@ -206,16 +216,66 @@ function DomainDetail({ domain, refreshing, onRefresh }: { domain: DomainWithReg
   );
 }
 
+function GroupIntro({ group, domain }: { group: DnsRecordGroup; domain: DomainWithRegion }) {
+  const theme = useTheme();
+  if (group === 'required') {
+    const count = domain.sesDkimTokens?.length ?? 0;
+    return (
+      <View style={styles.groupIntro}>
+        <ThemedText type="smallStrong">Required to send email</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          {count > 0 ? `Add these ${count} records first.` : 'Add these records first.'} Your domain is ready to send as soon as we find them.
+        </ThemedText>
+      </View>
+    );
+  }
+  if (group === 'recommended') {
+    return (
+      <View style={styles.groupIntro}>
+        <ThemedText type="smallStrong">Recommended</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          These help your emails reach the inbox instead of the spam folder. Add them now or later. They do not block sending.
+        </ThemedText>
+      </View>
+    );
+  }
+  // Already pointing at Mailmark: this owner receives mail here on purpose, so
+  // the "skip this" warning would read as advice to remove a record their inbox
+  // depends on.
+  if (domain.mxVerified) {
+    return (
+      <View style={styles.groupIntro}>
+        <ThemedText type="smallStrong">Receiving email in Mailmark</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          This record is set up, so email sent to @{domain.domain} arrives in your Mailmark inbox. Keep it as it is.
+        </ThemedText>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.groupIntro}>
+      <ThemedText type="smallStrong">Optional: only to receive email in Mailmark</ThemedText>
+      <View style={[styles.mxWarning, { backgroundColor: theme.warningSoft }]}>
+        <Icon name="warning" size={16} color={theme.warning} />
+        <ThemedText type="small" themeColor="warning" style={styles.flex}>
+          Skip this record if you already get email at @{domain.domain} through Gmail, Outlook, GoDaddy or any other provider. Changing it moves your inbox to Mailmark, and new email will stop arriving where you read it today. You do not need it to send emails.
+        </ThemedText>
+      </View>
+    </View>
+  );
+}
+
 function RecordCard({ record, domain, onCopy }: { record: DnsRecord; domain: string; onCopy: (text: string, what: string) => void }) {
   const theme = useTheme();
+  const optional = record.group === 'receiving' && !record.verified;
   return (
-    <View style={[styles.record, { backgroundColor: theme.surfaceRaised, borderColor: record.verified ? theme.border : theme.warningSoft }]}>
+    <View style={[styles.record, { backgroundColor: theme.surfaceRaised, borderColor: record.verified || optional ? theme.border : theme.warningSoft }]}>
       <View style={styles.recordTop}>
         <Badge label={record.type} />
         <ThemedText type="smallStrong" style={styles.flex}>
           {record.purpose}
         </ThemedText>
-        {record.verified ? <Badge label="Found" tone="success" icon="check" /> : <Badge label="Missing" tone="warning" />}
+        {record.verified ? <Badge label="Found" tone="success" icon="check" /> : optional ? <Badge label="Optional" /> : <Badge label="Missing" tone="warning" />}
       </View>
       <ThemedText type="caption" themeColor="textMuted">
         {record.explanation}
@@ -281,6 +341,18 @@ const styles = StyleSheet.create({
   },
   records: {
     gap: Spacing.three,
+  },
+  groupIntro: {
+    gap: Spacing.one,
+    paddingHorizontal: Spacing.two,
+  },
+  mxWarning: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.two,
+    padding: Spacing.three,
+    borderRadius: Radius.md,
+    marginTop: Spacing.one,
   },
   sectionLabel: {
     paddingHorizontal: Spacing.two,

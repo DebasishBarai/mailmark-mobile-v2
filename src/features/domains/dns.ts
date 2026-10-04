@@ -1,7 +1,18 @@
 import type { DomainWithRegion } from '@/lib/convex/types';
 
+/**
+ * What an owner has to do about a record. Only the DKIM records decide whether
+ * the domain verifies, so they are the whole of "required". The root MX is its
+ * own group because publishing it moves the domain's inbox to Mailmark: anyone
+ * already receiving mail there through another provider would stop getting it.
+ */
+export type DnsRecordGroup = 'required' | 'recommended' | 'receiving';
+
+export const DNS_RECORD_GROUPS: DnsRecordGroup[] = ['required', 'recommended', 'receiving'];
+
 export type DnsRecord = {
   key: string;
+  group: DnsRecordGroup;
   type: 'CNAME' | 'MX' | 'TXT';
   /** Host relative to the domain; "@" is the domain itself. */
   name: string;
@@ -25,6 +36,7 @@ export function dnsRecords(domain: DomainWithRegion): DnsRecord[] {
   return [
     ...(domain.sesDkimTokens ?? []).map((token, i) => ({
       key: `dkim-${i}`,
+      group: 'required' as const,
       type: 'CNAME' as const,
       name: `${token}._domainkey`,
       value: `${token}.dkim.amazonses.com`,
@@ -34,6 +46,7 @@ export function dnsRecords(domain: DomainWithRegion): DnsRecord[] {
     })),
     {
       key: 'mx',
+      group: 'receiving',
       type: 'MX',
       name: '@',
       priority: '10',
@@ -45,6 +58,7 @@ export function dnsRecords(domain: DomainWithRegion): DnsRecord[] {
     },
     {
       key: 'spf',
+      group: 'recommended',
       type: 'TXT',
       name: '@',
       value: 'v=spf1 include:amazonses.com ~all',
@@ -55,6 +69,7 @@ export function dnsRecords(domain: DomainWithRegion): DnsRecord[] {
     },
     {
       key: 'dmarc',
+      group: 'recommended',
       type: 'TXT',
       name: '_dmarc',
       value: `v=DMARC1; p=quarantine; rua=mailto:dmarc@${domain.domain}`,
@@ -65,6 +80,7 @@ export function dnsRecords(domain: DomainWithRegion): DnsRecord[] {
     },
     {
       key: 'mailfrom-mx',
+      group: 'recommended',
       type: 'MX',
       name: 'mail',
       priority: '10',
@@ -75,6 +91,7 @@ export function dnsRecords(domain: DomainWithRegion): DnsRecord[] {
     },
     {
       key: 'mailfrom-spf',
+      group: 'recommended',
       type: 'TXT',
       name: 'mail',
       value: 'v=spf1 include:amazonses.com ~all',
@@ -92,9 +109,19 @@ export function fullHost(record: DnsRecord, domain: string) {
 export function zoneFile(domain: string, records: DnsRecord[]): string {
   const lines = [`; Mailmark DNS records for ${domain}`, `; Generated on ${new Date().toISOString().split('T')[0]}`, `$ORIGIN ${domain}.`, ''];
   for (const r of records) {
-    if (r.type === 'CNAME') lines.push(`${r.name}\tIN\tCNAME\t${r.value}.`);
-    else if (r.type === 'MX') lines.push(`${r.name}\tIN\tMX\t${r.priority ?? '10'}\t${r.value}.`);
-    else lines.push(`${r.name}\tIN\tTXT\t"${r.value}"`);
+    let line: string;
+    if (r.type === 'CNAME') line = `${r.name}\tIN\tCNAME\t${r.value}.`;
+    else if (r.type === 'MX') line = `${r.name}\tIN\tMX\t${r.priority ?? '10'}\t${r.value}.`;
+    else line = `${r.name}\tIN\tTXT\t"${r.value}"`;
+    // An unpublished receiving MX ships commented out, so importing the file
+    // cannot move the inbox by accident. Once verified the owner receives here,
+    // and an export carried to a new DNS host has to keep it live.
+    if (r.group === 'receiving' && !r.verified) {
+      lines.push('; Optional. Only to receive email in Mailmark. This replaces your current inbox provider.');
+      lines.push(`; ${line}`);
+    } else {
+      lines.push(line);
+    }
   }
   return lines.join('\n') + '\n';
 }
