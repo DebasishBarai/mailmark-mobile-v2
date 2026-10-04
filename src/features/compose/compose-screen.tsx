@@ -11,6 +11,7 @@ import { useToast } from '@/components/feedback/toast';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Chip, Icon, IconButton, LoadingState } from '@/components/ui';
 import { Fonts, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { setCampaignHandoff } from '@/features/campaigns/new/handoff';
 import { newBatchId } from '@/features/campaigns/new/send-campaign';
 import { EmailBodyView } from '@/features/mail/email-body-view';
 import { useEmail } from '@/features/mail/use-email';
@@ -315,6 +316,31 @@ function Composer({
     finish(failed.length > 0 ? `${done}. Not sent: ${notSent}` : done);
   };
 
+  // The campaign flow takes a new message without attachments: it cannot carry
+  // attachments or a quoted reply, so it is not offered for those.
+  const canContinueAsCampaign = manyInTo && mode === 'compose' && attachments.length === 0;
+
+  // Move this message into the New campaign flow, where it can be personalised
+  // and given follow-ups. A move, not a copy: the local draft is cleared so a
+  // sent campaign leaves no duplicate behind, and the flow's own Cancel warns
+  // before anything is discarded.
+  const continueAsCampaign = () => {
+    const handoff = setCampaignHandoff({
+      mailboxId: mailbox._id,
+      recipients: allTo.map((email) => ({ email, fields: { email } })),
+      columns: [],
+      sourceLabel: 'Your message',
+      subject,
+      body,
+      contentType,
+      includeSignature,
+    });
+    sent.current = true;
+    draftStore.remove(draftId.current);
+    router.back();
+    setTimeout(() => router.push({ pathname: '/campaign-new', params: { mailboxId: mailbox._id, handoff } }), 0);
+  };
+
   const doSend = async () => {
     if (!canSend) return;
     if (attachmentBytes > MAX_ATTACHMENT_BYTES) {
@@ -586,6 +612,16 @@ function Composer({
                     ? `${allTo.length} separate emails, so nobody sees anyone else's address.${cc.length + bcc.length > 0 ? ' Cc and Bcc are left off.' : ''}`
                     : `One email with all ${allTo.length} people in To. Everyone will see each other's address.`}
                 </ThemedText>
+                {canContinueAsCampaign ? (
+                  <Pressable onPress={continueAsCampaign} hitSlop={8} accessibilityRole="button" style={styles.campaignLink}>
+                    <ThemedText type="caption" themeColor="textSecondary">
+                      Want to personalise it or add follow-ups?{cc.length + bcc.length > 0 ? ' Cc and Bcc are not carried over.' : ''}
+                    </ThemedText>
+                    <ThemedText type="smallStrong" themeColor="accent">
+                      Continue as a campaign
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
               </View>
               <Switch
                 value={separately}
@@ -818,6 +854,10 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     alignItems: 'center',
     paddingVertical: Spacing.two,
+  },
+  campaignLink: {
+    marginTop: Spacing.two,
+    gap: 2,
   },
   option: {
     flexDirection: 'row',
