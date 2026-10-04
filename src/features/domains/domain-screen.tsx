@@ -187,6 +187,17 @@ function DomainDetail({ domain, refreshing, onRefresh }: { domain: DomainWithReg
         ))}
       </View>
 
+      {!domain.verified ? (
+        <Group title="Stuck? We'll set it up with you">
+          <ListRow
+            title="Request a free setup call"
+            subtitle="We'll go through these records with you, step by step."
+            icon="help"
+            onPress={() => router.push({ pathname: '/setup-call', params: { domainId: domain._id, domain: domain.domain } })}
+          />
+        </Group>
+      ) : null}
+
       <Group
         title="Mailboxes"
         accessory={
