@@ -1,7 +1,19 @@
 import type { DomainWithRegion } from '@/lib/convex/types';
+import { mergeSpfInclude } from '@/lib/spf';
+
+/**
+ * What an owner has to do about a record. Only the DKIM records decide whether
+ * the domain verifies, so they are the whole of "required". The root MX is its
+ * own group because publishing it moves the domain's inbox to Mailmark: anyone
+ * already receiving mail there through another provider would stop getting it.
+ */
+export type DnsRecordGroup = 'required' | 'recommended' | 'receiving';
+
+export const DNS_RECORD_GROUPS: DnsRecordGroup[] = ['required', 'recommended', 'receiving'];
 
 export type DnsRecord = {
   key: string;
+  group: DnsRecordGroup;
   type: 'CNAME' | 'MX' | 'TXT';
   /** Host relative to the domain; "@" is the domain itself. */
   name: string;
@@ -12,6 +24,8 @@ export type DnsRecord = {
   verified: boolean;
   /** What DNS currently answers, when it is wrong. */
   current?: string;
+  /** Extra instruction shown under the value, when there is one. */
+  note?: string;
 };
 
 /**
@@ -22,9 +36,15 @@ export type DnsRecord = {
 export function dnsRecords(domain: DomainWithRegion): DnsRecord[] {
   const region = domain.region;
   const dkimStatus = domain.dkimRecordStatus ?? [];
+  // A domain may only have one SPF record. When it already has one (Google
+  // Workspace and Microsoft 365 both publish their own), adding ours as a
+  // second record breaks SPF for both, so show the combined value to replace
+  // it with, as the website does.
+  const mergedSpf = !domain.spfVerified && domain.actualSpfValue ? mergeSpfInclude(domain.actualSpfValue) : null;
   return [
     ...(domain.sesDkimTokens ?? []).map((token, i) => ({
       key: `dkim-${i}`,
+      group: 'required' as const,
       type: 'CNAME' as const,
       name: `${token}._domainkey`,
       value: `${token}.dkim.amazonses.com`,
@@ -34,6 +54,7 @@ export function dnsRecords(domain: DomainWithRegion): DnsRecord[] {
     })),
     {
       key: 'mx',
+      group: 'receiving',
       type: 'MX',
       name: '@',
       priority: '10',
@@ -45,19 +66,27 @@ export function dnsRecords(domain: DomainWithRegion): DnsRecord[] {
     },
     {
       key: 'spf',
+      group: 'recommended',
       type: 'TXT',
       name: '@',
-      value: 'v=spf1 include:amazonses.com ~all',
+      value: mergedSpf ?? 'v=spf1 include:amazonses.com ~all',
       purpose: 'SPF',
       explanation: 'Lists the servers allowed to send as your domain.',
       verified: domain.spfVerified,
       current: domain.spfVerified ? undefined : domain.actualSpfValue,
+      note: mergedSpf
+        ? 'You already have a record that starts with v=spf1. Edit that record and replace its value with the one above. Do not add a second one, because two of these records cancel each other out.'
+        : undefined,
     },
     {
       key: 'dmarc',
+      group: 'recommended',
       type: 'TXT',
       name: '_dmarc',
-      value: `v=DMARC1; p=quarantine; rua=mailto:dmarc@${domain.domain}`,
+      // p=none, as the website recommends: quarantine from day one sends a small
+      // business's invoices and booking emails from not-yet-authenticated tools
+      // to spam. Verification accepts any v=DMARC1 record.
+      value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain.domain}`,
       purpose: 'DMARC',
       explanation: 'Tells receivers what to do with mail that fails authentication.',
       verified: domain.dmarcVerified,
@@ -65,6 +94,7 @@ export function dnsRecords(domain: DomainWithRegion): DnsRecord[] {
     },
     {
       key: 'mailfrom-mx',
+      group: 'recommended',
       type: 'MX',
       name: 'mail',
       priority: '10',
@@ -75,6 +105,7 @@ export function dnsRecords(domain: DomainWithRegion): DnsRecord[] {
     },
     {
       key: 'mailfrom-spf',
+      group: 'recommended',
       type: 'TXT',
       name: 'mail',
       value: 'v=spf1 include:amazonses.com ~all',
@@ -92,9 +123,19 @@ export function fullHost(record: DnsRecord, domain: string) {
 export function zoneFile(domain: string, records: DnsRecord[]): string {
   const lines = [`; Mailmark DNS records for ${domain}`, `; Generated on ${new Date().toISOString().split('T')[0]}`, `$ORIGIN ${domain}.`, ''];
   for (const r of records) {
-    if (r.type === 'CNAME') lines.push(`${r.name}\tIN\tCNAME\t${r.value}.`);
-    else if (r.type === 'MX') lines.push(`${r.name}\tIN\tMX\t${r.priority ?? '10'}\t${r.value}.`);
-    else lines.push(`${r.name}\tIN\tTXT\t"${r.value}"`);
+    let line: string;
+    if (r.type === 'CNAME') line = `${r.name}\tIN\tCNAME\t${r.value}.`;
+    else if (r.type === 'MX') line = `${r.name}\tIN\tMX\t${r.priority ?? '10'}\t${r.value}.`;
+    else line = `${r.name}\tIN\tTXT\t"${r.value}"`;
+    // An unpublished receiving MX ships commented out, so importing the file
+    // cannot move the inbox by accident. Once verified the owner receives here,
+    // and an export carried to a new DNS host has to keep it live.
+    if (r.group === 'receiving' && !r.verified) {
+      lines.push('; Optional. Only to receive email in Mailmark. This replaces your current inbox provider.');
+      lines.push(`; ${line}`);
+    } else {
+      lines.push(line);
+    }
   }
   return lines.join('\n') + '\n';
 }

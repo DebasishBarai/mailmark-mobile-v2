@@ -2,6 +2,8 @@ import { createContext, use, useMemo, useState, type ReactNode } from 'react';
 
 import type { ContentType } from '@/lib/email/compose';
 
+import { getCampaignHandoff } from './handoff';
+
 export type MergeRecipient = { email: string; fields: Record<string, string> };
 export type FollowUpStep = { delayDays: number; subject: string; body: string };
 
@@ -38,9 +40,13 @@ const EMPTY: CampaignDraft = {
 
 const DraftContext = createContext<DraftApi | null>(null);
 
-/** State shared by the steps of the New campaign flow while it is open. */
-export function CampaignDraftProvider({ children, mailboxId }: { children: ReactNode; mailboxId?: string }) {
-  const [draft, setDraft] = useState<CampaignDraft>({ ...EMPTY, mailboxId: mailboxId ?? null });
+/**
+ * State shared by the steps of the New campaign flow while it is open. A
+ * `handoff` id starts it from a message the composer passed over (see
+ * handoff.ts) instead of empty.
+ */
+export function CampaignDraftProvider({ children, mailboxId, handoff }: { children: ReactNode; mailboxId?: string; handoff?: string }) {
+  const [draft, setDraft] = useState<CampaignDraft>(() => ({ ...EMPTY, mailboxId: mailboxId ?? null, ...getCampaignHandoff(handoff) }));
   const value = useMemo<DraftApi>(
     () => ({
       draft,

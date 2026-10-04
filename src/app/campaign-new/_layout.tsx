@@ -9,9 +9,9 @@ import { exitModalStack } from '@/lib/navigation';
 /** New campaign: a four-step flow in its own modal stack, sharing one draft. */
 export default function NewCampaignLayout() {
   const options = useStackOptions();
-  const { mailboxId } = useLocalSearchParams<{ mailboxId?: string }>();
+  const { mailboxId, handoff } = useLocalSearchParams<{ mailboxId?: string; handoff?: string }>();
   return (
-    <CampaignDraftProvider mailboxId={mailboxId}>
+    <CampaignDraftProvider mailboxId={mailboxId} handoff={handoff}>
       <Stack screenOptions={{ ...options, headerRight: () => <CancelButton /> }}>
         <Stack.Screen name="index" options={{ title: 'Audience' }} />
         <Stack.Screen name="content" options={{ title: 'Message' }} />

@@ -11,6 +11,8 @@ import { useToast } from '@/components/feedback/toast';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Chip, Icon, IconButton, LoadingState } from '@/components/ui';
 import { Fonts, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { setCampaignHandoff } from '@/features/campaigns/new/handoff';
+import { newBatchId } from '@/features/campaigns/new/send-campaign';
 import { EmailBodyView } from '@/features/mail/email-body-view';
 import { useEmail } from '@/features/mail/use-email';
 import { useEmailBody } from '@/features/mail/use-email-body';
@@ -42,6 +44,12 @@ import { RecipientField, type Verification } from './recipient-field';
 import { isInFuture, schedulePresets } from './schedule';
 import { useContactSuggestions } from './use-contact-suggestions';
 import { useFormatChooser } from './use-format-chooser';
+
+// Above this many people in To, one email would show every recipient every
+// other recipient's address, so the composer offers separate copies instead.
+const BULK_TO_WARNING_THRESHOLD = 5;
+// Separate copies go out a few at a time, as the campaign flow sends them.
+const SEPARATE_SEND_CONCURRENCY = 3;
 
 type Mode = 'compose' | 'reply' | 'replyAll' | 'forward';
 
@@ -225,6 +233,11 @@ function Composer({
     () => [...new Set([...to, ...selectedGroups.flatMap((g) => g.emails)])],
     [to, selectedGroups],
   );
+  // Null until the owner flips the switch: separate copies are the default once
+  // To holds more than a handful of people.
+  const [separateChoice, setSeparateChoice] = useState<boolean | null>(null);
+  const manyInTo = allTo.length > BULK_TO_WARNING_THRESHOLD;
+  const separately = manyInTo && (separateChoice ?? true);
   const invalid = [...allTo, ...cc, ...bcc].filter((e) => verification[e.toLowerCase()]?.isValid === false);
   const attachmentBytes = attachments.reduce((sum, a) => sum + a.size, 0);
   const canSend = allTo.length + cc.length + bcc.length > 0 && subject.trim().length > 0 && !sending;
@@ -260,10 +273,82 @@ function Composer({
     attachments: attachments.length ? attachments.map(({ filename, contentType: ct, data }) => ({ filename, contentType: ct, data })) : undefined,
   });
 
+  // One message per person in To, sharing a batch id, the way the campaign flow
+  // sends. Cc and Bcc are left off: copying them on every message would flood
+  // them. A refused address does not stop the rest, and once any copy has gone
+  // out the composer closes, so a retry cannot send the others twice.
+  const sendEachSeparately = async (at?: Date) => {
+    setSending(at ? 'schedule' : 'send');
+    setError(null);
+    const base = payload();
+    const batchId = newBatchId();
+    const queue = [...allTo];
+    const total = queue.length;
+    const failed: string[] = [];
+    const worker = async () => {
+      while (queue.length > 0) {
+        const email = queue.shift()!;
+        const one = { ...base, to: [email], cc: undefined, bcc: undefined };
+        try {
+          if (at) await scheduleEmail({ ...one, scheduledAt: at.getTime(), batchId });
+          else await sendEmail({ ...one, folder: 'sent', batchId });
+        } catch (err) {
+          failed.push(`${email} (${errorMessage(err, 'not sent')})`);
+        }
+      }
+    };
+    try {
+      await Promise.all(Array.from({ length: Math.min(SEPARATE_SEND_CONCURRENCY, total) }, worker));
+    } finally {
+      setSending(null);
+    }
+    const ok = total - failed.length;
+    // A refusal that hits everyone (the monthly limit, say) would otherwise list
+    // every address in the list.
+    const notSent = failed.length > 3 ? `${failed.slice(0, 3).join(', ')} and ${failed.length - 3} more` : failed.join(', ');
+    if (ok === 0) {
+      haptic('error');
+      setError(`Nothing was sent. ${notSent}`);
+      return;
+    }
+    const copies = `${ok} separate ${ok === 1 ? 'copy' : 'copies'}`;
+    const done = at ? `Scheduled ${copies} for ${fullDate(at.getTime())}` : `Sent ${copies}`;
+    finish(failed.length > 0 ? `${done}. Not sent: ${notSent}` : done);
+  };
+
+  // The campaign flow takes a new message without attachments: it cannot carry
+  // attachments or a quoted reply, so it is not offered for those.
+  const canContinueAsCampaign = manyInTo && mode === 'compose' && attachments.length === 0;
+
+  // Move this message into the New campaign flow, where it can be personalised
+  // and given follow-ups. A move, not a copy: the local draft is cleared so a
+  // sent campaign leaves no duplicate behind, and the flow's own Cancel warns
+  // before anything is discarded.
+  const continueAsCampaign = () => {
+    const handoff = setCampaignHandoff({
+      mailboxId: mailbox._id,
+      recipients: allTo.map((email) => ({ email, fields: { email } })),
+      columns: [],
+      sourceLabel: 'Your message',
+      subject,
+      body,
+      contentType,
+      includeSignature,
+    });
+    sent.current = true;
+    draftStore.remove(draftId.current);
+    router.back();
+    setTimeout(() => router.push({ pathname: '/campaign-new', params: { mailboxId: mailbox._id, handoff } }), 0);
+  };
+
   const doSend = async () => {
     if (!canSend) return;
     if (attachmentBytes > MAX_ATTACHMENT_BYTES) {
       setError(`Attachments total ${bytes(attachmentBytes)}. The limit for sending from the app is ${bytes(MAX_ATTACHMENT_BYTES)}.`);
+      return;
+    }
+    if (separately) {
+      await sendEachSeparately();
       return;
     }
     setSending('send');
@@ -298,6 +383,10 @@ function Composer({
     if (!canSend) return;
     if (!isInFuture(at, 60_000)) {
       setError('Choose a time at least a minute from now.');
+      return;
+    }
+    if (separately) {
+      await sendEachSeparately(at);
       return;
     }
     setSending('schedule');
@@ -512,6 +601,35 @@ function Composer({
               <RecipientField label="Cc" value={cc} onChange={setCc} suggestions={suggestions} verification={verification} />
               <RecipientField label="Bcc" value={bcc} onChange={setBcc} suggestions={suggestions} verification={verification} />
             </>
+          ) : null}
+
+          {manyInTo ? (
+            <View style={[styles.option, { borderColor: theme.warningSoft, backgroundColor: theme.warningSoft }]}>
+              <View style={styles.flex}>
+                <ThemedText type="smallStrong">Send each person their own copy</ThemedText>
+                <ThemedText type="caption" themeColor="textSecondary">
+                  {separately
+                    ? `${allTo.length} separate emails, so nobody sees anyone else's address.${cc.length + bcc.length > 0 ? ' Cc and Bcc are left off.' : ''}`
+                    : `One email with all ${allTo.length} people in To. Everyone will see each other's address.`}
+                </ThemedText>
+                {canContinueAsCampaign ? (
+                  <Pressable onPress={continueAsCampaign} hitSlop={8} accessibilityRole="button" style={styles.campaignLink}>
+                    <ThemedText type="caption" themeColor="textSecondary">
+                      Want to personalise it or add follow-ups?{cc.length + bcc.length > 0 ? ' Cc and Bcc are not carried over.' : ''}
+                    </ThemedText>
+                    <ThemedText type="smallStrong" themeColor="accent">
+                      Continue as a campaign
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </View>
+              <Switch
+                value={separately}
+                onValueChange={setSeparateChoice}
+                trackColor={{ true: theme.accent, false: theme.backgroundSelected }}
+                accessibilityLabel="Send each person their own copy"
+              />
+            </View>
           ) : null}
 
           <View style={[styles.subjectRow, { borderBottomColor: theme.border }]}>
@@ -736,6 +854,10 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     alignItems: 'center',
     paddingVertical: Spacing.two,
+  },
+  campaignLink: {
+    marginTop: Spacing.two,
+    gap: 2,
   },
   option: {
     flexDirection: 'row',

@@ -141,6 +141,7 @@ function RootNavigator() {
         <Stack.Screen name="new-api-key" options={{ presentation: 'modal', headerShown: true, title: 'New API key' }} />
         <Stack.Screen name="sender-group" options={{ presentation: 'modal', headerShown: true, title: 'Sender group' }} />
         <Stack.Screen name="signature" options={{ presentation: 'modal', headerShown: true, title: 'Signature' }} />
+        <Stack.Screen name="setup-call" options={{ presentation: 'modal', headerShown: true, title: 'Free setup call' }} />
         <Stack.Screen
           name="mailbox-picker"
           options={{
