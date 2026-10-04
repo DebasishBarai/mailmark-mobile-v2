@@ -1,4 +1,5 @@
 import type { DomainWithRegion } from '@/lib/convex/types';
+import { mergeSpfInclude } from '@/lib/spf';
 
 /**
  * What an owner has to do about a record. Only the DKIM records decide whether
@@ -23,6 +24,8 @@ export type DnsRecord = {
   verified: boolean;
   /** What DNS currently answers, when it is wrong. */
   current?: string;
+  /** Extra instruction shown under the value, when there is one. */
+  note?: string;
 };
 
 /**
@@ -33,6 +36,11 @@ export type DnsRecord = {
 export function dnsRecords(domain: DomainWithRegion): DnsRecord[] {
   const region = domain.region;
   const dkimStatus = domain.dkimRecordStatus ?? [];
+  // A domain may only have one SPF record. When it already has one (Google
+  // Workspace and Microsoft 365 both publish their own), adding ours as a
+  // second record breaks SPF for both, so show the combined value to replace
+  // it with, as the website does.
+  const mergedSpf = !domain.spfVerified && domain.actualSpfValue ? mergeSpfInclude(domain.actualSpfValue) : null;
   return [
     ...(domain.sesDkimTokens ?? []).map((token, i) => ({
       key: `dkim-${i}`,
@@ -61,11 +69,14 @@ export function dnsRecords(domain: DomainWithRegion): DnsRecord[] {
       group: 'recommended',
       type: 'TXT',
       name: '@',
-      value: 'v=spf1 include:amazonses.com ~all',
+      value: mergedSpf ?? 'v=spf1 include:amazonses.com ~all',
       purpose: 'SPF',
       explanation: 'Lists the servers allowed to send as your domain.',
       verified: domain.spfVerified,
       current: domain.spfVerified ? undefined : domain.actualSpfValue,
+      note: mergedSpf
+        ? 'You already have a record that starts with v=spf1. Edit that record and replace its value with the one above. Do not add a second one, because two of these records cancel each other out.'
+        : undefined,
     },
     {
       key: 'dmarc',

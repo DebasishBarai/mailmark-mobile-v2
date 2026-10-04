@@ -283,6 +283,11 @@ function RecordCard({ record, domain, onCopy }: { record: DnsRecord; domain: str
       <CopyField label="Host" value={record.name} hint={fullHost(record, domain)} onCopy={() => onCopy(record.name, 'Host')} />
       {record.priority ? <CopyField label="Priority" value={record.priority} onCopy={() => onCopy(record.priority!, 'Priority')} /> : null}
       <CopyField label="Value" value={record.value} onCopy={() => onCopy(record.value, 'Value')} />
+      {record.note ? (
+        <ThemedText type="caption" themeColor="warning">
+          {record.note}
+        </ThemedText>
+      ) : null}
       {record.current ? (
         <View style={[styles.current, { backgroundColor: theme.warningSoft }]}>
           <ThemedText type="caption" themeColor="warning">
