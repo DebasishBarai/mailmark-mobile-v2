@@ -83,7 +83,10 @@ export function dnsRecords(domain: DomainWithRegion): DnsRecord[] {
       group: 'recommended',
       type: 'TXT',
       name: '_dmarc',
-      value: `v=DMARC1; p=quarantine; rua=mailto:dmarc@${domain.domain}`,
+      // p=none, as the website recommends: quarantine from day one sends a small
+      // business's invoices and booking emails from not-yet-authenticated tools
+      // to spam. Verification accepts any v=DMARC1 record.
+      value: `v=DMARC1; p=none; rua=mailto:dmarc@${domain.domain}`,
       purpose: 'DMARC',
       explanation: 'Tells receivers what to do with mail that fails authentication.',
       verified: domain.dmarcVerified,
