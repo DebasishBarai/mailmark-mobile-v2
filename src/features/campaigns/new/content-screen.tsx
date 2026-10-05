@@ -13,7 +13,7 @@ import { useFormatChooser } from '@/features/compose/use-format-chooser';
 import { useTheme } from '@/hooks/use-theme';
 import { buildBody } from '@/lib/email/compose';
 import { FORMAT_LABELS } from '@/lib/email/format';
-import { escapesMergeValues, extractMergeFields, resolveMergeFields } from '@/lib/merge-fields';
+import { escapesMergeValues, extractMergeFields, mergeTag, resolveMergeFields } from '@/lib/merge-fields';
 
 import { useCampaignDraft } from './draft';
 import { StepFooter } from './step-footer';
@@ -36,7 +36,7 @@ export function ContentScreen() {
   const unknown = used.filter((f) => !fields.includes(f));
 
   const insert = (field: string) => {
-    const tag = `{${field}}`;
+    const tag = mergeTag(field);
     if (target.current === 'body') {
       // The body editor knows its own caret, in rich text and source alike.
       bodyEditor.current?.insertText(tag);
@@ -90,11 +90,11 @@ export function ContentScreen() {
                 </ThemedText>
                 <View style={styles.chips}>
                   {fields.map((f) => (
-                    <Chip key={f} label={`{${f}}`} icon="merge" selected={used.includes(f)} onPress={() => insert(f)} />
+                    <Chip key={f} label={mergeTag(f)} icon="merge" selected={used.includes(f)} onPress={() => insert(f)} />
                   ))}
                 </View>
                 <ThemedText type="caption" themeColor="textMuted">
-                  Use {'{Field|fallback}'} to fill in a value when a row is blank.
+                  Use {'{{Field|fallback}}'} to fill in a value when a row is blank.
                 </ThemedText>
               </View>
 
@@ -121,7 +121,7 @@ export function ContentScreen() {
                 value={draft.body}
                 onChange={(body) => update({ body })}
                 onFocus={() => (target.current = 'body')}
-                placeholder={`Hi {${fields.find((f) => /first|name/i.test(f)) ?? fields[0]}},\n\n…`}
+                placeholder={`Hi ${mergeTag(fields.find((f) => /first|name/i.test(f)) ?? fields[0])},\n\n…`}
                 inputStyle={[styles.body, { borderColor: theme.border, backgroundColor: theme.inputBackground }]}
               />
               {mailbox?.signature ? (
@@ -141,7 +141,7 @@ export function ContentScreen() {
               ) : null}
               {unknown.length > 0 ? (
                 <ThemedText type="caption" themeColor="warning">
-                  {unknown.map((f) => `{${f}}`).join(', ')} {unknown.length === 1 ? 'is not a column' : 'are not columns'} in your recipient list and will be sent as typed.
+                  {unknown.map((f) => mergeTag(f)).join(', ')} {unknown.length === 1 ? 'is not a column' : 'are not columns'} in your recipient list and will be sent as typed.
                 </ThemedText>
               ) : null}
             </>

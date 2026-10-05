@@ -17,7 +17,7 @@ import { errorMessage } from '@/lib/convex/errors';
 import { fullDate, plural } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { exitModalStack } from '@/lib/navigation';
-import { extractMergeFields, toSequenceTemplate } from '@/lib/merge-fields';
+import { extractMergeFields } from '@/lib/merge-fields';
 
 import { useCampaignDraft } from './draft';
 import { newBatchId, sendCampaign, type SendProgress } from './send-campaign';
@@ -39,7 +39,6 @@ export function ReviewScreen() {
   const [minimumDate] = useState(() => new Date(Date.now() + 5 * 60 * 1000));
   const cancelled = useRef(false);
 
-  const unsupported = draft.followUps.flatMap((f) => [...toSequenceTemplate(f.subject).unsupported, ...toSequenceTemplate(f.body).unsupported]);
   const fieldsUsed = extractMergeFields(draft.subject + draft.body);
 
   const start = async (scheduledAt?: number) => {
@@ -109,14 +108,6 @@ export function ReviewScreen() {
             />
             <ListRow title="Follow-ups" value={draft.followUps.length ? String(draft.followUps.length) : 'None'} icon="sequence" onPress={() => router.back()} />
           </Group>
-
-          {unsupported.length > 0 ? (
-            <Card style={{ backgroundColor: theme.warningSoft, borderColor: theme.warningSoft }}>
-              <ThemedText type="small" themeColor="warning">
-                These follow-up merge fields will not be filled in: {[...new Set(unsupported)].join(', ')}. Follow-ups support one-word column names without fallbacks.
-              </ThemedText>
-            </Card>
-          ) : null}
 
           <Card style={styles.note}>
             <Icon name="shield" size={16} color={theme.textSecondary} />

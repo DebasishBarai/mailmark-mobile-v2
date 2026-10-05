@@ -1,12 +1,40 @@
 /**
  * Mail merge, ported verbatim in behaviour from lib/mergeFields.ts on the
- * website so a campaign personalises identically from either client:
- * {Field} is replaced by the recipient's value, {Field|fallback} uses the
- * fallback when the value is empty, and unknown fields are left as typed.
+ * website so a campaign personalises identically from either client.
+ *
+ * Merge fields are written {{Field}}, or {{Field|fallback}} for text to use
+ * when a recipient has no value: the same double-brace form the API and the
+ * sequence processor use. The older single-brace {Field} / {Field|fallback}
+ * is still read, so drafts written before keep working, but nothing writes
+ * it any more. Unknown fields without a fallback are left as typed.
  */
 
 export function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Double braces are tried first so {{Field}} is never read as {Field} inside a
+// stray pair of braces.
+const MERGE_TOKEN = /\{\{([^{}|]+?)(?:\|([^{}]*?))?\}\}|\{([^{}|]+?)(?:\|([^{}]*?))?\}/g;
+
+/**
+ * Calls `replace` for every merge field in `template` and puts back what it
+ * returns. `field` is trimmed; `fallback` is undefined when none was written.
+ */
+export function replaceMergeTokens(
+  template: string,
+  replace: (field: string, fallback: string | undefined, token: string) => string,
+): string {
+  return template.replace(
+    MERGE_TOKEN,
+    (token, doubleField?: string, doubleFallback?: string, singleField?: string, singleFallback?: string) =>
+      doubleField !== undefined ? replace(doubleField.trim(), doubleFallback, token) : replace((singleField ?? '').trim(), singleFallback, token),
+  );
+}
+
+/** The tag to insert for a field: {{Field}}, or {{Field|fallback}}. */
+export function mergeTag(field: string, fallback?: string): string {
+  return fallback === undefined ? `{{${field}}}` : `{{${field}|${fallback}}}`;
 }
 
 export function resolveMergeFields(
@@ -15,11 +43,11 @@ export function resolveMergeFields(
   options?: { escapeValues?: boolean },
 ): string {
   const out = (value: string) => (options?.escapeValues ? escapeHtml(value) : value);
-  return template.replace(/\{([^{}|]+?)(?:\|([^{}]*?))?\}/g, (match, fieldName: string, fallback?: string) => {
-    const value = fields[fieldName.trim()];
+  return replaceMergeTokens(template, (field, fallback, token) => {
+    const value = fields[field];
     if (value !== undefined && value !== '') return out(value);
     if (fallback !== undefined) return out(fallback);
-    return match;
+    return token;
   });
 }
 
@@ -33,29 +61,10 @@ export function escapesMergeValues(contentType: string): boolean {
 }
 
 export function extractMergeFields(template: string): string[] {
-  const regex = /\{([^{}|]+?)(?:\|[^{}]*?)?\}/g;
   const fields = new Set<string>();
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(template)) !== null) fields.add(match[1].trim());
-  return [...fields];
-}
-
-/**
- * Follow-up steps are personalised by the backend's sequence processor, which
- * substitutes {{key}} (word characters only) and nothing else. Rewrite the
- * {Field} tokens people write everywhere else into that form so follow-ups
- * personalise too. Tokens it cannot express (spaces, fallbacks) are reported.
- */
-export function toSequenceTemplate(template: string): { text: string; unsupported: string[] } {
-  const unsupported: string[] = [];
-  const text = template.replace(/\{\{\w+\}\}|\{([^{}|]+?)(?:\|([^{}]*?))?\}/g, (match, field: string | undefined, fallback?: string) => {
-    if (field === undefined) return match; // already {{key}}
-    const name = field.trim();
-    if (!/^\w+$/.test(name) || fallback !== undefined) {
-      unsupported.push(match);
-      return /^\w+$/.test(name) ? `{{${name}}}` : match;
-    }
-    return `{{${name}}}`;
+  replaceMergeTokens(template, (field, _fallback, token) => {
+    fields.add(field);
+    return token;
   });
-  return { text, unsupported };
+  return [...fields];
 }

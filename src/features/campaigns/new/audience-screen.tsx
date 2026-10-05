@@ -17,6 +17,7 @@ import { errorMessage } from '@/lib/convex/errors';
 import { useLiveQuery } from '@/lib/convex/hooks';
 import type { Id } from '@/lib/convex/types';
 import { scanEmails } from '@/lib/email/address';
+import { mergeTag } from '@/lib/merge-fields';
 import { plural } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 
@@ -224,7 +225,7 @@ export function AudienceScreen() {
               {draft.columns.length > 0 ? (
                 <View style={styles.chips}>
                   {draft.columns.map((c) => (
-                    <Chip key={c} label={`{${c}}`} icon="merge" />
+                    <Chip key={c} label={mergeTag(c)} icon="merge" />
                   ))}
                 </View>
               ) : null}

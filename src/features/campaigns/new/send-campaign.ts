@@ -2,11 +2,12 @@ import type { ReactAction } from 'convex/react';
 
 import type { api } from '@/lib/convex/api';
 import { errorMessage } from '@/lib/convex/errors';
-import type { Id, Mailbox, SequenceStep } from '@/lib/convex/types';
+import type { Id, Mailbox } from '@/lib/convex/types';
 import { buildBody } from '@/lib/email/compose';
-import { escapeHtml, escapesMergeValues, resolveMergeFields, toSequenceTemplate } from '@/lib/merge-fields';
+import { escapesMergeValues, resolveMergeFields } from '@/lib/merge-fields';
 
 import type { CampaignDraft } from './draft';
+import { buildFollowUpSequence } from './follow-up-sequence';
 
 export type SendProgress = { done: number; total: number; failed: { email: string; reason: string }[] };
 
@@ -22,14 +23,10 @@ export function newBatchId() {
   return `campaign-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function followUpHtml(body: string): string {
-  return /<\s*(p|div|br|table|a|span|h\d)\b/i.test(body) ? body : escapeHtml(body).replace(/\n/g, '<br>');
-}
-
 /**
  * Send a campaign exactly as the website's handleSendCampaign /
  * handleScheduleCampaign do: one message per recipient sharing a batchId,
- * personalised with {Field} merge values (HTML-escaped for plain text), then
+ * personalised with {{Field}} merge values (HTML-escaped for plain text), then
  * a follow-up sequence enrolling everyone if follow-ups were written.
  *
  * Unlike the website loop, one refused recipient does not abandon the rest:
@@ -87,25 +84,23 @@ export async function sendCampaign(
 
   if (draft.followUps.length > 0 && !options.isCancelled()) {
     const failed = new Set(progress.failed.map((f) => f.email.toLowerCase()));
-    const steps: SequenceStep[] = [{ type: 'send_email', subject: draft.subject, html: body }];
-    for (const fu of draft.followUps) {
-      steps.push({ type: 'delay', delayMs: fu.delayDays * 86_400_000 });
-      steps.push({
-        type: 'send_email',
-        subject: toSequenceTemplate(fu.subject).text,
-        html: toSequenceTemplate(followUpHtml(fu.body)).text,
+    const reached = draft.recipients.filter((r) => !failed.has(r.email.toLowerCase()));
+    if (reached.length > 0) {
+      // Every token resolved per contact, fallbacks included, and timed from the
+      // scheduled send for a scheduled campaign (see follow-up-sequence.ts).
+      const sequence = buildFollowUpSequence({
+        firstSubject: draft.subject,
+        firstHtml: body,
+        followUps: draft.followUps,
+        recipients: reached,
+        startAt: options.scheduledAt,
       });
-    }
-    const contacts = draft.recipients
-      .filter((r) => !failed.has(r.email.toLowerCase()))
-      .map((r) => ({ email: r.email, mergeFields: r.fields }));
-    if (contacts.length > 0) {
       await actions.createSequence({
         mailboxId: mailbox._id,
         domainId: mailbox.domainId as Id<'domains'>,
         name: `Follow-up: ${draft.subject.slice(0, 50)}`,
-        steps,
-        contacts,
+        steps: sequence.steps,
+        contacts: sequence.contacts,
       });
     }
   }
