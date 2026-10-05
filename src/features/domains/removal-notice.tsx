@@ -6,7 +6,7 @@ import { Button, Icon } from '@/components/ui';
 import { Radius, Spacing } from '@/constants/theme';
 import { useNow } from '@/hooks/use-now';
 import { useTheme } from '@/hooks/use-theme';
-import { formatRemovalTime, removalUrgency, unverifiedRemovalTime } from '@/lib/domain-removal';
+import { formatRemovalDate, formatRemovalTime, removalUrgency, unverifiedRemovalTime } from '@/lib/domain-removal';
 
 /**
  * Warnings that an unverified domain will be removed by the nightly cleanup
@@ -52,6 +52,16 @@ export function RemovalNotice({ createdAt, domainId, domain }: { createdAt: numb
       </View>
     </View>
   );
+}
+
+/** The line under an unverified domain in the domains list. */
+export function removalHint(createdAt: number, now: number): { text: string; urgent: boolean } {
+  const removeAt = unverifiedRemovalTime(createdAt);
+  const urgency = removalUrgency(removeAt, now);
+  return {
+    text: urgency === 'overdue' ? 'Due for removal: not verified within 7 days' : `Removed ${formatRemovalDate(removeAt)} if not verified`,
+    urgent: urgency !== 'later',
+  };
 }
 
 const styles = StyleSheet.create({
