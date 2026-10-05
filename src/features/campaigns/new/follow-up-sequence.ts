@@ -19,7 +19,7 @@ export function followUpHtml(body: string): string {
  * the first email does. Ported verbatim in behaviour from
  * lib/campaign/followUps.ts on the website.
  *
- * Owners write {{FirstName|there}} or {{Job Type}} here as everywhere else,
+ * Owners write {{firstName|there}} or {{Job Type}} here as everywhere else,
  * but the sequence processor only fills {{key}} for one-word keys, with no
  * fallbacks and no HTML escaping. So each distinct token becomes its own
  * {{mmk_N}} key and every contact carries that key already resolved: their

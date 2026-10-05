@@ -223,7 +223,7 @@ export function plainToHtml(text: string): string {
 const isWordChar = (ch: string | undefined) => !!ch && /[A-Za-z0-9À-￿]/.test(ch);
 
 // Escape characters Markdown would treat as syntax. Braces are left alone so
-// merge fields such as {{FirstName}} keep working.
+// merge fields such as {{firstName}} keep working.
 export function escapeMarkdownInline(text: string): string {
   let out = '';
   for (let i = 0; i < text.length; i++) {
