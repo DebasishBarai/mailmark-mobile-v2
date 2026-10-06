@@ -27,6 +27,7 @@ import type {
   Email,
   EmailBody,
   EmailStats,
+  GroupContact,
   Id,
   Mailbox,
   OutgoingAttachment,
@@ -139,10 +140,14 @@ export const api = {
 
   senderGroups: {
     list: query<{ mailboxId: Id<'mailboxes'> }, SenderGroup[]>('senderGroups:list'),
-    create: mutation<{ mailboxId: Id<'mailboxes'>; name: string; emails: string[] }, Id<'senderGroups'>>(
-      'senderGroups:create',
+    create: mutation<
+      { mailboxId: Id<'mailboxes'>; name: string; emails: string[]; contacts?: GroupContact[] },
+      Id<'senderGroups'>
+    >('senderGroups:create'),
+    // Leaving out `contacts` keeps the names the list already has.
+    update: mutation<{ id: Id<'senderGroups'>; name: string; emails: string[]; contacts?: GroupContact[] }>(
+      'senderGroups:update',
     ),
-    update: mutation<{ id: Id<'senderGroups'>; name: string; emails: string[] }>('senderGroups:update'),
     updateMailboxes: mutation<{ id: Id<'senderGroups'>; mailboxIds: Id<'mailboxes'>[] }>(
       'senderGroups:updateMailboxes',
     ),
