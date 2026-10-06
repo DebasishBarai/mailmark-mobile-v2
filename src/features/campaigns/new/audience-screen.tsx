@@ -338,7 +338,7 @@ export function AudienceScreen() {
                 ))}
                 {draft.recipients.length > 4 ? (
                   <ThemedText type="caption" themeColor="textMuted">
-                    and {plural(draft.recipients.length - 4, 'more')}
+                    and {(draft.recipients.length - 4).toLocaleString()} more
                   </ThemedText>
                 ) : null}
               </View>
