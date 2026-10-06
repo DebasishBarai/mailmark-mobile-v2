@@ -98,6 +98,8 @@ export const api = {
     >('emails:listByFolderPaginated'),
     countByFolder: query<{ mailboxId: Id<'mailboxes'>; folder: string }, number>('emails:countByFolder'),
     countUnreadByMailbox: query<{ mailboxId: Id<'mailboxes'> }, number>('emails:countUnreadByMailbox'),
+    // Whether the user has sent or scheduled a campaign, for the setup checklist.
+    hasSentCampaign: query<Empty, boolean>('emails:hasSentCampaign'),
     markAsRead: mutation<{ emailId: Id<'emails'> }>('emails:markAsRead'),
     markAsUnread: mutation<{ emailId: Id<'emails'> }>('emails:markAsUnread'),
     markAllAsRead: mutation<{ mailboxId: Id<'mailboxes'> }>('emails:markAllAsRead'),

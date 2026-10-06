@@ -24,7 +24,16 @@ export const ADDRESS_WHY =
 
 const MAX = 300;
 
-export function BusinessAddressForm({ domainId, saved }: { domainId: Id<'domains'>; saved?: string }) {
+export function BusinessAddressForm({
+  domainId,
+  saved,
+  onSaved,
+}: {
+  domainId: Id<'domains'>;
+  saved?: string;
+  /** Called with the address as saved, e.g. to close a sheet. */
+  onSaved?: (address: string) => void;
+}) {
   const theme = useTheme();
   const toast = useToast();
   const setAddress = useMutation(api.domains.setPostalAddress);
@@ -43,6 +52,7 @@ export function BusinessAddressForm({ domainId, saved }: { domainId: Id<'domains
       setEditing(false);
       haptic('success');
       toast.show({ message: 'Mailing address saved', icon: 'check' });
+      onSaved?.(clean);
     } catch (err) {
       setError(errorMessage(err, 'The address could not be saved. Please try again.'));
     } finally {
