@@ -108,8 +108,8 @@ export function AudienceScreen() {
   const addGroup = () => {
     const available = groups.data ?? [];
     sheet.show({
-      title: 'Add a sender group',
-      message: available.length ? undefined : 'This mailbox has no sender groups yet.',
+      title: 'Add a saved list',
+      message: available.length ? undefined : 'This mailbox has no saved lists yet.',
       options: available.map((g) => ({
         label: `${g.name} (${g.emails.length})`,
         icon: 'team' as const,
@@ -188,7 +188,7 @@ export function AudienceScreen() {
             <ListRow title="Import a CSV file" subtitle="From Files, Drive or iCloud" icon="table" iconTint="#3f6b44" onPress={importCsv} disabled={busy !== null} />
             <ListRow title="Google Sheets link" subtitle="Shared as “Anyone with the link”" icon="link" iconTint="#3a5f8a" onPress={() => setMode(mode === 'sheet' ? null : 'sheet')} />
             <ListRow title="Paste addresses" subtitle="Any text containing email addresses" icon="copy" iconTint="#8a5a2b" onPress={() => setMode(mode === 'paste' ? null : 'paste')} />
-            <ListRow title="Sender group" subtitle="A saved list on this mailbox" icon="team" iconTint="#6b4b8a" onPress={addGroup} />
+            <ListRow title="Saved list" subtitle="Lists you saved on this mailbox" icon="team" iconTint="#6b4b8a" onPress={addGroup} />
           </Group>
 
           {mode ? (
