@@ -17,6 +17,8 @@ export type CampaignDraft = {
   contentType: ContentType;
   includeSignature: boolean;
   followUps: FollowUpStep[];
+  /** A note shown at the top of the flow, e.g. who "Send again" is for. */
+  notice: string | null;
 };
 
 type DraftApi = {
@@ -36,6 +38,7 @@ const EMPTY: CampaignDraft = {
   contentType: 'rich',
   includeSignature: true,
   followUps: [],
+  notice: null,
 };
 
 const DraftContext = createContext<DraftApi | null>(null);

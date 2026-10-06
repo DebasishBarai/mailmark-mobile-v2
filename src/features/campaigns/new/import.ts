@@ -3,6 +3,7 @@ import { detectEmailColumn, parseCSV } from '@/lib/csv';
 import { isValidEmail, scanEmails } from '@/lib/email/address';
 
 import type { MergeRecipient } from './draft';
+import { withFirstName } from './first-name';
 
 export type ImportResult =
   | { ok: true; recipients: MergeRecipient[]; columns: string[]; emailColumn: string | null; skipped: number }
@@ -11,7 +12,8 @@ export type ImportResult =
 /**
  * Same interpretation of a CSV as the website's processImportedCSV: a file
  * with a header row and several columns becomes a mail merge (every column is
- * a merge field); anything else is scanned for addresses.
+ * a merge field, plus firstName when there is a name column); anything else
+ * is scanned for addresses.
  */
 export function interpretCsv(text: string): ImportResult {
   const parsed = parseCSV(text);
@@ -20,10 +22,13 @@ export function interpretCsv(text: string): ImportResult {
     if (!emailColumn) return { ok: false, error: 'No email column detected in the CSV.' };
     const valid = parsed.rows.filter((row) => isValidEmail(row[emailColumn] ?? ''));
     if (valid.length === 0) return { ok: false, error: 'No valid email addresses found.' };
+    // A name column also gives everyone a firstName field, as on the website.
+    const recipients = valid.map((row) => ({ email: row[emailColumn].trim(), fields: withFirstName({ ...row }) }));
+    const addedFirstName = !parsed.headers.includes('firstName') && recipients.some((r) => 'firstName' in r.fields);
     return {
       ok: true,
-      recipients: valid.map((row) => ({ email: row[emailColumn].trim(), fields: { ...row } })),
-      columns: parsed.headers,
+      recipients,
+      columns: addedFirstName ? [...parsed.headers, 'firstName'] : parsed.headers,
       emailColumn,
       skipped: parsed.rows.length - valid.length,
     };

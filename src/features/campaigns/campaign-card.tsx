@@ -10,7 +10,16 @@ import { listDate, plural, timeUntil } from '@/lib/format';
 import type { Campaign } from './campaign-index';
 import { rate } from './stats';
 
-export const CampaignCard = memo(function CampaignCard({ campaign, onPress }: { campaign: Campaign; onPress: () => void }) {
+export const CampaignCard = memo(function CampaignCard({
+  campaign,
+  complete = true,
+  onPress,
+}: {
+  campaign: Campaign;
+  /** Every message of it is loaded. Until then the figures would be partial, so they wait. */
+  complete?: boolean;
+  onPress: () => void;
+}) {
   const theme = useTheme();
   const { stats } = campaign;
   const sent = stats.total - stats.scheduled;
@@ -38,10 +47,15 @@ export const CampaignCard = memo(function CampaignCard({ campaign, onPress }: { 
         )}
       </View>
       <ThemedText type="caption" themeColor="textSecondary" numberOfLines={1}>
-        {campaign.mailboxAddress} · {listDate(campaign.at)} · {plural(stats.total, 'recipient')}
+        {campaign.mailboxAddress} · {listDate(campaign.at)}
+        {complete ? ` · ${plural(stats.total, 'recipient')}` : ''}
       </ThemedText>
 
-      {sent > 0 ? (
+      {!complete ? (
+        <ThemedText type="caption" themeColor="textMuted">
+          Counting...
+        </ThemedText>
+      ) : sent > 0 ? (
         <>
           <View style={styles.metrics}>
             <Metric label="Delivered" value={`${rate(stats.delivered, sent)}%`} />

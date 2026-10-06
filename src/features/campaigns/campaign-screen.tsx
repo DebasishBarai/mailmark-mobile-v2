@@ -1,20 +1,30 @@
+import { useConvex } from 'convex/react';
+import type { PaginationResult } from 'convex/server';
 import { Stack, router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Badge, Button, Card, EmptyState, ErrorState, Icon, LoadingState, Segmented } from '@/components/ui';
+import { useToast } from '@/components/feedback/toast';
+import { Badge, Button, Card, EmptyState, ErrorState, Icon, IconButton, LoadingState, Segmented } from '@/components/ui';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { DELIVERY_META, deliveryState, useToneColor } from '@/features/mail/delivery-status';
 import { emailHref } from '@/features/mail/use-email';
 import { useWorkspace } from '@/features/workspace/workspace';
 import { useTheme } from '@/hooks/use-theme';
-import type { Email } from '@/lib/convex/types';
+import { api } from '@/lib/convex/api';
+import { errorMessage } from '@/lib/convex/errors';
+import type { Email, SequenceEnrollment } from '@/lib/convex/types';
 import { rawEmail } from '@/lib/email/address';
-import { fullDate, listDate, plural } from '@/lib/format';
+import { fullDate, plural } from '@/lib/format';
 
+import { campaignCsv, matchFollowUp, recipientStatus } from './history';
+import { setCampaignHandoff } from './new/handoff';
+import { notOpenedEmails, recallCampaignMessage, recipientColumns, sendAgainRecipients, splitSignature } from './send-again';
+import { shareCampaignCsv } from './share-csv';
 import { SEQUENCE_STATUS } from './sequence-card';
 import { campaignStats, matchesFilter, rate, type RecipientFilter } from './stats';
+import type { CampaignDraft } from './new/draft';
 import { useCampaignRecipients } from './use-campaign-recipients';
 import { useSequences } from './use-sequences';
 
@@ -40,27 +50,141 @@ export function CampaignScreen({ batchId }: { batchId: string }) {
   const mailbox = mailboxes.data?.find((m) => m._id === first?.mailboxId);
   const followUp = useMemo(
     () =>
-      first
-        ? sequences.data?.find((s) => s.mailboxId === first.mailboxId && s.name === `Follow-up: ${first.subject.slice(0, 50)}`)
-        : undefined,
-    [sequences.data, first],
+      first && sequences.data
+        ? matchFollowUp({ batchId, mailboxId: first.mailboxId, subject: first.subject }, sequences.data)
+        : null,
+    [sequences.data, first, batchId],
   );
+  const notOpened = useMemo(() => notOpenedEmails(emails), [emails]);
+  const convex = useConvex();
+  const toast = useToast();
+  const [preparing, setPreparing] = useState(false);
+
+  // Opens New campaign with the people who didn't open and, where it can be
+  // found, the message as it was written (see send-again.ts).
+  const prepareSendAgain = async () => {
+    if (!first) return;
+    setPreparing(true);
+    try {
+      // A subject with a merge field reaches each customer filled in ("Hi
+      // John"), so a sent copy's subject is only the campaign's when they all match.
+      const sameSubject = emails.every((e) => e.subject === first.subject);
+      const which = sameSubject ? `"${first.subject}"` : 'this campaign';
+      let subject = sameSubject ? first.subject : '';
+      let body = '';
+      let contentType: CampaignDraft['contentType'] = 'rich';
+      let includeSignature = true;
+      let found = false;
+      let fieldsByEmail: Record<string, Record<string, unknown>> = {};
+      const remembered = await recallCampaignMessage(batchId);
+      const firstStep = followUp?.steps.find((step) => step.type === 'send_email');
+      if (remembered) {
+        ({ subject, body, contentType, includeSignature } = remembered);
+        fieldsByEmail = remembered.fields ?? {};
+        found = true;
+      } else if (followUp && firstStep?.type === 'send_email') {
+        subject = firstStep.subject;
+        ({ body, includeSignature } = splitSignature(firstStep.html));
+        found = true;
+        // Names and columns travel with each follow-up contact.
+        try {
+          let cursor: string | null = null;
+          for (let pages = 0; pages < 20; pages++) {
+            const result: PaginationResult<SequenceEnrollment> = await convex.query(api.sequences.listEnrollmentsPage, {
+              sequenceId: followUp._id,
+              paginationOpts: { numItems: 500, cursor },
+            });
+            for (const e of result.page) {
+              if (e.mergeFields && typeof e.mergeFields === 'object') fieldsByEmail[e.contactEmail.toLowerCase()] = e.mergeFields;
+            }
+            if (result.isDone) break;
+            cursor = result.continueCursor;
+          }
+        } catch {
+          // Without names the greeting falls back, e.g. "Hi there".
+        }
+      }
+      const recipients = sendAgainRecipients(notOpened, fieldsByEmail);
+      const handoff = setCampaignHandoff({
+        mailboxId: first.mailboxId,
+        recipients,
+        columns: recipientColumns(recipients),
+        sourceLabel: `Didn't open ${which}`,
+        subject,
+        body,
+        contentType,
+        includeSignature,
+        notice: found
+          ? `Sending again to ${plural(recipients.length, 'customer')} who didn't open ${which}. The same message is filled in: check it, then send.`
+          : `Sending again to ${plural(recipients.length, 'customer')} who didn't open ${which}. The message as you wrote it isn't saved anywhere this app can reach, so write it again in the next step.${sameSubject ? ' The subject is filled in.' : ''}`,
+      });
+      router.push({ pathname: '/campaign-new', params: { mailboxId: first.mailboxId, handoff } });
+    } finally {
+      setPreparing(false);
+    }
+  };
+
+  const shareCsv = () => {
+    // Named after the subject only when it is the same for everyone (no merge field in it).
+    const subject = first && emails.every((e) => e.subject === first.subject) ? first.subject : '';
+    shareCampaignCsv(campaignCsv(emails), subject).catch((err: unknown) =>
+      toast.show({ message: errorMessage(err, 'The CSV could not be shared.'), tone: 'error' }),
+    );
+  };
+
+  const sendAgain = () => {
+    if (followUp?.status !== 'active') return void prepareSendAgain();
+    const message = "This campaign's follow-ups are still going out to people who haven't replied. Send a new campaign to those who didn't open anyway?";
+    // Alert does nothing on the web build.
+    if (process.env.EXPO_OS === 'web') {
+      if (window.confirm(message)) void prepareSendAgain();
+      return;
+    }
+    Alert.alert('Send again?', message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Send again', onPress: () => void prepareSendAgain() },
+    ]);
+  };
+
   const filtered = useMemo(
     () => emails.filter((e) => matchesFilter(e, filter)).sort((a, b) => a.to[0]?.localeCompare(b.to[0] ?? '') ?? 0),
     [emails, filter],
   );
 
-  if (recipients.loading && emails.length === 0) return <LoadingState label="Loading campaign" />;
   if (recipients.error && emails.length === 0) return <ErrorState error={recipients.error} />;
+  if (!first && recipients.loading) return <LoadingState label="Loading campaign" />;
   if (!first) {
-    return (
+    return recipients.paused ? (
       <EmptyState
         icon="campaign"
         title="Campaign not found"
-        description="It may be older than the mail loaded on this device. Open Campaigns and load older campaigns, or view it on the website."
+        description="It wasn't in your most recent sent mail. It may be older."
+        actionLabel="Keep looking"
+        onAction={recipients.keepCounting}
+      />
+    ) : (
+      <EmptyState
+        icon="campaign"
+        title="Campaign not found"
+        description="It may have been sent from a mailbox you no longer have."
         actionLabel="Back to campaigns"
         onAction={() => router.back()}
       />
+    );
+  }
+  // The figures wait until every message of the campaign is loaded, so a
+  // 500 person send never reads as 100.
+  if (!recipients.complete) {
+    return recipients.paused ? (
+      <EmptyState
+        icon="campaign"
+        title="Still counting"
+        description={`This campaign is large, and ${plural(emails.length, 'recipient')} are counted so far.`}
+        actionLabel="Keep counting"
+        onAction={recipients.keepCounting}
+      />
+    ) : (
+      <LoadingState label={`Counting ${plural(emails.length, 'recipient')} so far`} />
     );
   }
 
@@ -69,7 +193,12 @@ export function CampaignScreen({ batchId }: { batchId: string }) {
 
   const header = (
     <View style={styles.headerContent}>
-      <Stack.Screen options={{ title: 'Campaign' }} />
+      <Stack.Screen
+        options={{
+          title: 'Campaign',
+          headerRight: () => <IconButton icon="share" label="Share as CSV" color={theme.accent} onPress={shareCsv} />,
+        }}
+      />
       <View style={styles.titleBlock}>
         <ThemedText type="title">{first.subject || '(no subject)'}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
@@ -90,11 +219,16 @@ export function CampaignScreen({ batchId }: { batchId: string }) {
       </View>
 
       {sent > 0 ? <Funnel sent={sent} delivered={stats.delivered} opened={stats.opened} clicked={stats.clicked} replied={stats.replied} /> : null}
+      {sent > 0 ? (
+        <ThemedText type="caption" themeColor="textMuted">
+          Opens are a rough guide: some email apps open every message automatically. Replies are the surest sign.
+        </ThemedText>
+      ) : null}
 
       {stats.complained + stats.blocked > 0 ? (
         <Card style={{ backgroundColor: theme.warningSoft, borderColor: theme.warningSoft }}>
           <ThemedText type="small" themeColor="warning">
-            {stats.blocked > 0 ? `${plural(stats.blocked, 'recipient')} not sent (suppressed, unsubscribed or failed verification). ` : ''}
+            {stats.blocked > 0 ? `${plural(stats.blocked, 'recipient')} not sent, for example because they unsubscribed or the address doesn't exist. ` : ''}
             {stats.complained > 0 ? `${plural(stats.complained, 'recipient')} marked this as spam.` : ''}
           </ThemedText>
         </Card>
@@ -117,10 +251,14 @@ export function CampaignScreen({ batchId }: { batchId: string }) {
         </Pressable>
       ) : null}
 
-      {!recipients.complete ? (
-        <ThemedText type="caption" themeColor="textMuted">
-          Figures cover the {plural(emails.length, 'recipient')} found in the sent mail loaded so far. Load older campaigns on the Campaigns screen to include the rest of a very large send.
-        </ThemedText>
+      {notOpened.length > 0 ? (
+        <Button
+          title={`Send again to ${notOpened.length.toLocaleString()} who didn't open`}
+          icon="send"
+          loading={preparing}
+          disabled={preparing}
+          onPress={sendAgain}
+        />
       ) : null}
 
       <Segmented scrollable value={filter} onChange={setFilter} options={FILTERS.map((f) => ({ ...f, count: emails.filter((e) => matchesFilter(e, f.value)).length }))} />
@@ -196,28 +334,23 @@ function RecipientRow({ email }: { email: Email }) {
   const toneColor = useToneColor();
   const state = deliveryState(email);
   const meta = state ? DELIVERY_META[state] : null;
+  // What happened, in words: "Didn't arrive: this address does not exist".
+  const status = recipientStatus(email);
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={`${email.to.map(rawEmail).join(', ')}. ${status.label}`}
       onPress={() => router.push(emailHref(email))}
       style={({ pressed }) => [styles.recipient, pressed && { backgroundColor: theme.backgroundSelected }]}>
+      {meta ? <Icon name={meta.icon} size={14} color={toneColor(status.tone)} /> : null}
       <View style={styles.flex}>
         <ThemedText type="body" numberOfLines={1}>
           {email.to.map(rawEmail).join(', ')}
         </ThemedText>
-        <ThemedText type="caption" themeColor="textMuted">
-          {listDate(email.repliedAt ?? email.openedAt ?? email.date)}
-          {email.clickedLinks?.length ? ` · ${plural(email.clickedLinks.length, 'click')}` : ''}
+        <ThemedText type="caption" color={toneColor(status.tone)}>
+          {status.label}
         </ThemedText>
       </View>
-      {meta ? (
-        <View style={styles.status}>
-          <Icon name={meta.icon} size={13} color={toneColor(meta.tone)} />
-          <ThemedText type="caption" color={toneColor(meta.tone)}>
-            {meta.label}
-          </ThemedText>
-        </View>
-      ) : null}
     </Pressable>
   );
 }

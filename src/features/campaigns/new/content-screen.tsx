@@ -1,10 +1,10 @@
 import { Stack, router } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
-import { StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Alert, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
 import { ThemedText } from '@/components/themed-text';
-import { Card, Chip, IconButton, Segmented } from '@/components/ui';
+import { Card, Chip, Group, IconButton, ListRow, Segmented } from '@/components/ui';
 import { Fonts, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { EmailBodyView } from '@/features/mail/email-body-view';
 import { useWorkspace } from '@/features/workspace/workspace';
@@ -13,9 +13,11 @@ import { useFormatChooser } from '@/features/compose/use-format-chooser';
 import { useTheme } from '@/hooks/use-theme';
 import { buildBody } from '@/lib/email/compose';
 import { FORMAT_LABELS } from '@/lib/email/format';
-import { escapesMergeValues, extractMergeFields, mergeTag, resolveMergeFields } from '@/lib/merge-fields';
+import { escapesMergeValues, extractMergeFields, mergeTag, replaceMergeTokens, resolveMergeFields } from '@/lib/merge-fields';
 
 import { useCampaignDraft } from './draft';
+import { findUnfilledPlaceholders } from './placeholders';
+import { CAMPAIGN_TEMPLATES, renderTemplate, type CampaignTemplate } from './templates';
 import { StepFooter } from './step-footer';
 
 type Target = 'subject' | 'body';
@@ -33,7 +35,20 @@ export function ContentScreen() {
 
   const fields = draft.columns.length > 0 ? draft.columns : ['email'];
   const used = useMemo(() => extractMergeFields(draft.subject + draft.body), [draft.subject, draft.body]);
-  const unknown = used.filter((f) => !fields.includes(f));
+  // A field with a fallback ({{firstName|there}}) reads the fallback when a
+  // recipient has no value, so only fields without one go out as typed.
+  const unknown = used.filter((f) => !fields.includes(f) && fieldsWithoutFallback(draft.subject + draft.body).has(f));
+  const placeholders = findUnfilledPlaceholders(draft.subject, draft.body);
+  const empty = !draft.subject.trim() && !draft.body.trim();
+  const [showTemplates, setShowTemplates] = useState(empty);
+  // Bumped to remount the body editor, which reads its value when it mounts.
+  const [editorKey, setEditorKey] = useState(0);
+
+  const applyTemplate = (template: { subject: string; body: string }) => {
+    update({ ...template, contentType: 'rich' });
+    setEditorKey((k) => k + 1);
+    setShowTemplates(false);
+  };
 
   const insert = (field: string) => {
     const tag = mergeTag(field);
@@ -84,6 +99,7 @@ export function ContentScreen() {
 
           {tab === 'write' ? (
             <>
+              {showTemplates ? <TemplatePicker businessName={mailbox?.displayName ?? ''} replacing={!empty} onApply={applyTemplate} /> : null}
               <View style={styles.fieldBlock}>
                 <ThemedText type="label" themeColor="textSecondary">
                   Merge fields · tap to insert
@@ -114,8 +130,15 @@ export function ContentScreen() {
                   icon="code"
                   onPress={chooseFormat}
                 />
+                <Chip label="Templates" icon="drafts" selected={showTemplates} onPress={() => setShowTemplates((v) => !v)} />
               </View>
+              {placeholders.length > 0 ? (
+                <ThemedText type="caption" themeColor="warning">
+                  Fill in the parts in square brackets before sending: {placeholders.join(', ')}
+                </ThemedText>
+              ) : null}
               <ComposeBodyEditor
+                key={editorKey}
                 ref={bodyEditor}
                 format={draft.contentType}
                 value={draft.body}
@@ -218,6 +241,7 @@ const styles = StyleSheet.create({
   },
   formatRow: {
     flexDirection: 'row',
+    gap: Spacing.two,
   },
   body: {
     fontSize: 15,
@@ -250,3 +274,45 @@ const styles = StyleSheet.create({
     gap: 2,
   },
 });
+
+function fieldsWithoutFallback(template: string): Set<string> {
+  const names = new Set<string>();
+  replaceMergeTokens(template, (field, fallback, token) => {
+    if (fallback === undefined) names.add(field);
+    return token;
+  });
+  return names;
+}
+
+/** The three ready-made campaigns. Choosing one over a written message asks first. */
+function TemplatePicker({
+  businessName,
+  replacing,
+  onApply,
+}: {
+  businessName: string;
+  replacing: boolean;
+  onApply: (template: { subject: string; body: string }) => void;
+}) {
+  const choose = (t: CampaignTemplate) => {
+    const apply = () => onApply(renderTemplate(t, businessName));
+    if (!replacing) return apply();
+    const message = 'Replace your current subject and message with this template?';
+    // Alert does nothing on the web build.
+    if (process.env.EXPO_OS === 'web') {
+      if (window.confirm(message)) apply();
+      return;
+    }
+    Alert.alert(t.name, message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Replace', style: 'destructive', onPress: apply },
+    ]);
+  };
+  return (
+    <Group title="Start from a template" footer="Fill in the parts in [square brackets], then check the preview.">
+      {CAMPAIGN_TEMPLATES.map((t) => (
+        <ListRow key={t.id} title={t.name} subtitle={t.description} icon="drafts" onPress={() => choose(t)} />
+      ))}
+    </Group>
+  );
+}
