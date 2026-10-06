@@ -9,7 +9,7 @@ import { useToast } from '@/components/feedback/toast';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Chip, Group, ListRow } from '@/components/ui';
 import { Fonts, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
-import { pickCsvText } from '@/features/compose/pick-attachments';
+import { pickContactsText, pickCsvText } from '@/features/compose/pick-attachments';
 import { useWorkspace } from '@/features/workspace/workspace';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/convex/api';
@@ -25,6 +25,7 @@ import { mergeRecipients, useCampaignDraft, type MergeRecipient } from './draft'
 import { fetchSheet, interpretCsv } from './import';
 import { groupToRecipients, MAX_SAVED, nameColumns, recipientsToContacts } from './saved-list';
 import { StepFooter } from './step-footer';
+import { isVCard, parseVCards } from './vcard';
 
 type Mode = null | 'paste' | 'sheet';
 
@@ -48,7 +49,8 @@ export function AudienceScreen() {
   const mailbox = list.find((m) => m._id === draft.mailboxId) ?? list[0];
   const groups = useLiveQuery(api.senderGroups.list, mailbox ? { mailboxId: mailbox._id as Id<'mailboxes'> } : 'skip');
 
-  const add = (incoming: MergeRecipient[], columns: string[], label: string, skipped = 0) => {
+  // `skippedNote` replaces the "rows without a valid address" wording, e.g. for phone contacts.
+  const add = (incoming: MergeRecipient[], columns: string[], label: string, skipped = 0, skippedNote?: string) => {
     const merged = mergeRecipients(draft.recipients, incoming);
     const added = merged.length - draft.recipients.length;
     update({
@@ -59,7 +61,7 @@ export function AudienceScreen() {
     setVerdicts(null);
     haptic('success');
     toast.show({
-      message: `${plural(added, 'recipient')} added${skipped ? ` · ${skipped} rows without a valid address skipped` : ''}`,
+      message: `${plural(added, 'recipient')} added${skipped ? ` · ${skippedNote ?? `${skipped} rows without a valid address skipped`}` : ''}`,
       icon: 'team',
     });
   };
@@ -69,9 +71,45 @@ export function AudienceScreen() {
     try {
       const file = await pickCsvText();
       if (!file) return;
+      if (isVCard(file.text)) return importContacts(file.text, file.name);
       const result = interpretCsv(file.text);
       if (!result.ok) toast.show({ message: result.error, tone: 'error' });
       else add(result.recipients, result.columns, file.name, result.skipped);
+    } catch (err) {
+      toast.show({ message: errorMessage(err, 'Could not read that file.'), tone: 'error' });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Phone contacts (.vcf). Contacts with no email address can't be emailed,
+  // so they are skipped and counted.
+  const importContacts = (text: string, label: string) => {
+    const result = parseVCards(text);
+    if (result.recipients.length === 0) {
+      toast.show({
+        message:
+          result.contacts === 0
+            ? 'No contacts were found in that file. Export your contacts as a .vcf file and try again.'
+            : `${result.contacts === 1 ? 'This contact has no email address' : `None of these ${plural(result.contacts, 'contact')} has an email address`}. Mailmark sends email, so only contacts with an email address can be added.`,
+        tone: 'error',
+      });
+      return;
+    }
+    add(
+      result.recipients,
+      nameColumns(result.recipients, draft.columns),
+      label,
+      result.withoutEmail,
+      `${plural(result.withoutEmail, 'contact')} had no email address and ${result.withoutEmail === 1 ? 'was' : 'were'} skipped`,
+    );
+  };
+
+  const pickContacts = async () => {
+    setBusy('contacts');
+    try {
+      const file = await pickContactsText();
+      if (file) importContacts(file.text, file.name);
     } catch (err) {
       toast.show({ message: errorMessage(err, 'Could not read that file.'), tone: 'error' });
     } finally {
@@ -224,6 +262,7 @@ export function AudienceScreen() {
 
           <Group title="Add recipients" footer="A CSV or sheet with a header row becomes a mail merge: every column can be used as {{Column}} in the subject and body.">
             <ListRow title="Import a CSV file" subtitle="From Files, Drive or iCloud" icon="table" iconTint="#3f6b44" onPress={importCsv} disabled={busy !== null} />
+            <ListRow title="Phone contacts" subtitle="A .vcf file exported from your phone" icon="person" iconTint="#8a3b3b" onPress={pickContacts} disabled={busy !== null} />
             <ListRow title="Google Sheets link" subtitle="Shared as “Anyone with the link”" icon="link" iconTint="#3a5f8a" onPress={() => setMode(mode === 'sheet' ? null : 'sheet')} />
             <ListRow title="Paste addresses" subtitle="Any text containing email addresses" icon="copy" iconTint="#8a5a2b" onPress={() => setMode(mode === 'paste' ? null : 'paste')} />
             <ListRow title="Saved list" subtitle="Lists you saved on this mailbox" icon="team" iconTint="#6b4b8a" onPress={addGroup} />

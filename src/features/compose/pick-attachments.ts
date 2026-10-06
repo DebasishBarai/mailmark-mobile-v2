@@ -83,3 +83,19 @@ export async function pickCsvText(): Promise<{ name: string; text: string } | nu
   }
   return { name: asset.name, text: await new File(asset.uri).text() };
 }
+
+/** A phone contacts export (.vcf) for recipient import, as text. */
+export async function pickContactsText(): Promise<{ name: string; text: string } | null> {
+  const result = await DocumentPicker.getDocumentAsync({
+    // Phones label .vcf files inconsistently, so anything can be picked and
+    // the Audience step checks the contents.
+    type: ['text/vcard', 'text/x-vcard', 'text/directory', '*/*'],
+    copyToCacheDirectory: true,
+  });
+  if (result.canceled) return null;
+  const asset = result.assets[0];
+  if (process.env.EXPO_OS === 'web') {
+    return { name: asset.name, text: await (await fetch(asset.uri)).text() };
+  }
+  return { name: asset.name, text: await new File(asset.uri).text() };
+}
