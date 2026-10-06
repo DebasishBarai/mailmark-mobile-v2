@@ -21,6 +21,7 @@ import { extractMergeFields } from '@/lib/merge-fields';
 
 import { rememberCampaignMessage } from '../send-again';
 import { useCampaignDraft } from './draft';
+import { findUnfilledPlaceholders } from './placeholders';
 import { newBatchId, sendCampaign, type SendProgress } from './send-campaign';
 
 type Phase = { kind: 'review' } | { kind: 'sending'; progress: SendProgress; scheduledAt?: number } | { kind: 'done'; progress: SendProgress; batchId: string; scheduledAt?: number; error?: string };
@@ -41,6 +42,12 @@ export function ReviewScreen() {
   const cancelled = useRef(false);
 
   const fieldsUsed = extractMergeFields(draft.subject + draft.body);
+  // A template's [phone number] must never reach a customer.
+  const placeholders = [
+    ...findUnfilledPlaceholders(draft.subject, draft.body),
+    ...draft.followUps.flatMap((f) => findUnfilledPlaceholders(f.subject, f.body)),
+  ].filter((p, i, all) => all.indexOf(p) === i);
+  const blocked = !mailbox || placeholders.length > 0;
 
   const start = async (scheduledAt?: number) => {
     if (!mailbox) return;
@@ -124,8 +131,19 @@ export function ReviewScreen() {
             </ThemedText>
           </Card>
 
-          <Button title={`Send to ${plural(draft.recipients.length, 'recipient')}`} icon="send" size="lg" fullWidth onPress={confirmSend} disabled={!mailbox} />
-          <Button title="Schedule for later" icon="calendar" variant="secondary" size="lg" fullWidth onPress={openSchedule} disabled={!mailbox} />
+          {placeholders.length > 0 ? (
+            <Card style={{ backgroundColor: theme.warningSoft, borderColor: theme.warningSoft }}>
+              <ThemedText type="smallStrong" themeColor="warning">
+                Fill in these parts before sending
+              </ThemedText>
+              <ThemedText type="small" themeColor="warning">
+                {placeholders.join(', ')}
+              </ThemedText>
+            </Card>
+          ) : null}
+
+          <Button title={`Send to ${plural(draft.recipients.length, 'recipient')}`} icon="send" size="lg" fullWidth onPress={confirmSend} disabled={blocked} />
+          <Button title="Schedule for later" icon="calendar" variant="secondary" size="lg" fullWidth onPress={openSchedule} disabled={blocked} />
 
           {picking ? (
             <Card style={styles.picker}>

@@ -16,6 +16,7 @@ import { FORMAT_LABELS } from '@/lib/email/format';
 import { escapesMergeValues, extractMergeFields, mergeTag, resolveMergeFields } from '@/lib/merge-fields';
 
 import { useCampaignDraft } from './draft';
+import { findUnfilledPlaceholders } from './placeholders';
 import { StepFooter } from './step-footer';
 
 type Target = 'subject' | 'body';
@@ -34,6 +35,7 @@ export function ContentScreen() {
   const fields = draft.columns.length > 0 ? draft.columns : ['email'];
   const used = useMemo(() => extractMergeFields(draft.subject + draft.body), [draft.subject, draft.body]);
   const unknown = used.filter((f) => !fields.includes(f));
+  const placeholders = findUnfilledPlaceholders(draft.subject, draft.body);
 
   const insert = (field: string) => {
     const tag = mergeTag(field);
@@ -115,6 +117,11 @@ export function ContentScreen() {
                   onPress={chooseFormat}
                 />
               </View>
+              {placeholders.length > 0 ? (
+                <ThemedText type="caption" themeColor="warning">
+                  Fill in the parts in square brackets before sending: {placeholders.join(', ')}
+                </ThemedText>
+              ) : null}
               <ComposeBodyEditor
                 ref={bodyEditor}
                 format={draft.contentType}
