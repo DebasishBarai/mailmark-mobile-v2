@@ -1,7 +1,7 @@
-import { useAction } from 'convex/react';
+import { useAction, useMutation } from 'convex/react';
 import { Stack, router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { Alert, StyleSheet, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
 import { useActionSheet } from '@/components/feedback/action-sheet';
@@ -23,7 +23,7 @@ import { haptic } from '@/lib/haptics';
 
 import { mergeRecipients, useCampaignDraft, type MergeRecipient } from './draft';
 import { fetchSheet, interpretCsv } from './import';
-import { groupToRecipients, nameColumns } from './saved-list';
+import { groupToRecipients, MAX_SAVED, nameColumns, recipientsToContacts } from './saved-list';
 import { StepFooter } from './step-footer';
 
 type Mode = null | 'paste' | 'sheet';
@@ -35,10 +35,14 @@ export function AudienceScreen() {
   const { draft, update } = useCampaignDraft();
   const { mailboxes } = useWorkspace();
   const verify = useAction(api.verification.verifyForCurrentUser);
+  const createGroup = useMutation(api.senderGroups.create);
+  const updateGroup = useMutation(api.senderGroups.update);
   const [mode, setMode] = useState<Mode>(null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [verdicts, setVerdicts] = useState<{ valid: number; invalid: string[]; unknown: number; checked: number } | null>(null);
+  // The name being typed for "Save as a list"; null while the form is closed.
+  const [saveName, setSaveName] = useState<string | null>(null);
 
   const list = mailboxes.data ?? [];
   const mailbox = list.find((m) => m._id === draft.mailboxId) ?? list[0];
@@ -120,6 +124,40 @@ export function AudienceScreen() {
         },
       })),
     });
+  };
+
+  // Saves the recipients so far as a list on this mailbox, with their names.
+  const saveList = () => {
+    const name = (saveName ?? '').trim();
+    if (!mailbox || !name || draft.recipients.length === 0 || draft.recipients.length > MAX_SAVED) return;
+    const existing = groups.data?.find((g) => g.name.trim().toLowerCase() === name.toLowerCase());
+    const save = async () => {
+      setBusy('save');
+      try {
+        const emails = draft.recipients.map((r) => r.email);
+        const contacts = recipientsToContacts(draft.recipients);
+        if (existing) await updateGroup({ id: existing._id, name: existing.name, emails, contacts });
+        else await createGroup({ mailboxId: mailbox._id as Id<'mailboxes'>, name, emails, contacts });
+        setSaveName(null);
+        haptic('success');
+        toast.show({ message: `Saved as "${existing?.name ?? name}". Next time, pick it under Saved list.`, icon: 'check' });
+      } catch (err) {
+        toast.show({ message: errorMessage(err, 'The list could not be saved. Please try again.'), tone: 'error' });
+      } finally {
+        setBusy(null);
+      }
+    };
+    if (!existing) return void save();
+    const message = `You already have a list called "${existing.name}". Replace it with these ${plural(draft.recipients.length, 'recipient')}?`;
+    // Alert does nothing on the web build.
+    if (process.env.EXPO_OS === 'web') {
+      if (window.confirm(message)) void save();
+      return;
+    }
+    Alert.alert('Replace this list?', message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Replace', style: 'destructive', onPress: () => void save() },
+    ]);
   };
 
   const checkAddresses = async () => {
@@ -227,6 +265,7 @@ export function AudienceScreen() {
                   onPress={() => {
                     update({ recipients: [], columns: [], sourceLabel: null, notice: null });
                     setVerdicts(null);
+                    setSaveName(null);
                   }}
                 />
               </View>
@@ -278,6 +317,40 @@ export function AudienceScreen() {
                 </View>
               ) : (
                 <Button title="Check addresses" variant="secondary" size="sm" icon="shield" loading={busy === 'verify'} onPress={checkAddresses} />
+              )}
+              {saveName === null ? (
+                <Button title="Save as a list" variant="secondary" size="sm" icon="team" onPress={() => setSaveName('')} />
+              ) : (
+                <View style={[styles.saveForm, { borderColor: theme.border }]}>
+                  {draft.recipients.length > MAX_SAVED ? (
+                    <ThemedText type="small" themeColor="textSecondary">
+                      A saved list can hold up to {MAX_SAVED.toLocaleString('en-US')} recipients. Remove some, or keep using your file for this one.
+                    </ThemedText>
+                  ) : (
+                    <>
+                      <ThemedText type="small" themeColor="textSecondary">
+                        Save these {plural(draft.recipients.length, 'recipient')} to pick again next time. Names are saved too.
+                      </ThemedText>
+                      <TextInput
+                        value={saveName}
+                        onChangeText={setSaveName}
+                        autoFocus
+                        placeholder="List name, e.g. Spring customers"
+                        placeholderTextColor={theme.textMuted}
+                        returnKeyType="done"
+                        onSubmitEditing={saveList}
+                        maxLength={100}
+                        style={[styles.input, { color: theme.text, borderColor: theme.border, minHeight: 44 }]}
+                      />
+                    </>
+                  )}
+                  <View style={styles.saveActions}>
+                    <Button title="Cancel" variant="ghost" size="sm" onPress={() => setSaveName(null)} />
+                    {draft.recipients.length > MAX_SAVED ? null : (
+                      <Button title="Save list" size="sm" loading={busy === 'save'} disabled={!saveName.trim() || busy !== null} onPress={saveList} />
+                    )}
+                  </View>
+                </View>
               )}
             </Card>
           ) : null}
@@ -342,6 +415,16 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
   },
   verdicts: {
+    gap: Spacing.two,
+  },
+  saveForm: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: Spacing.three,
+    gap: Spacing.two,
+  },
+  saveActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
     gap: Spacing.two,
   },
 });
