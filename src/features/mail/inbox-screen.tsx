@@ -1,6 +1,6 @@
 import { Stack, router } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Platform, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { FlatList, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useMutation } from 'convex/react';
 
 import { useActionSheet } from '@/components/feedback/action-sheet';
@@ -16,8 +16,9 @@ import {
   SearchField,
   SwipeRow,
 } from '@/components/ui';
-import { Radius, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useLocalDrafts, type LocalDraft } from '@/features/compose/drafts';
+import { SetupChecklist } from '@/features/setup/setup-checklist';
 import { useWorkspace } from '@/features/workspace/workspace';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/convex/api';
@@ -124,15 +125,26 @@ export function InboxScreen() {
     );
   }
   if (!mailbox) {
+    // A new account sees the setup checklist here; the plain empty state
+    // stays for anyone who hid it.
     return (
       <>
         {header}
-        <EmptyState
-          icon="at"
-          title="No mailboxes yet"
-          description="Add a domain and create a mailbox on it to start sending and receiving mail."
-          actionLabel="Set up a domain"
-          onAction={() => router.push('/domains')}
+        <SetupChecklist
+          fallback={
+            <EmptyState
+              icon="at"
+              title="No mailboxes yet"
+              description="Add a domain and create a mailbox on it to start sending and receiving mail."
+              actionLabel="Set up a domain"
+              onAction={() => router.push('/domains')}
+            />
+          }
+          wrap={(card) => (
+            <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.setupScroll}>
+              <View style={styles.setupInner}>{card}</View>
+            </ScrollView>
+          )}
         />
       </>
     );
@@ -397,6 +409,15 @@ function DraftRow({ draft }: { draft: LocalDraft }) {
 }
 
 const styles = StyleSheet.create({
+  setupScroll: {
+    alignItems: 'center',
+    paddingBottom: Spacing.six,
+  },
+  setupInner: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    padding: Spacing.four,
+  },
   headerButtons: {
     flexDirection: 'row',
     alignItems: 'center',

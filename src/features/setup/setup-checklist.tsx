@@ -54,10 +54,13 @@ function useHidden(userId: string | undefined): boolean | undefined {
 export function SetupChecklist({
   style,
   fallback = null,
+  wrap = (card) => card,
 }: {
   style?: ViewStyle;
   /** Shown instead whenever the card is not (loading, hidden or all done). */
   fallback?: ReactNode;
+  /** Places the card, e.g. in a scroll view; not applied to the fallback. */
+  wrap?: (card: ReactNode) => ReactNode;
 }) {
   const theme = useTheme();
   const now = useNow();
@@ -76,7 +79,7 @@ export function SetupChecklist({
   if (list.current === null) return fallback;
   const hint = list.waitingForDns && list.domain ? removalHint(list.domain._creationTime, now) : null;
 
-  return (
+  return wrap(
     <Card padded={false} style={style}>
       <View style={styles.header}>
         <View style={styles.headerRow}>
@@ -155,7 +158,7 @@ export function SetupChecklist({
           }}
         />
       </View>
-    </Card>
+    </Card>,
   );
 }
 
