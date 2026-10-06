@@ -10,11 +10,17 @@ import { useRefreshKey } from '@/lib/convex/hooks';
 import type { Sequence } from '@/lib/convex/types';
 
 import { CampaignCard } from './campaign-card';
-import { useCampaignIndex, type Campaign } from './campaign-index';
+import { useCampaignIndex, useLoadFolders, type Campaign } from './campaign-index';
+import { foldersToRead, listableCampaigns } from './history';
 import { SequenceCard } from './sequence-card';
 import { useSequences } from './use-sequences';
 
 type Tab = 'campaigns' | 'followups';
+
+// The newest campaigns whose figures are completed automatically, and how many
+// messages that may load before waiting for "Load older campaigns".
+const COMPLETE_FIRST = 10;
+const AUTO_LOAD = 2_000;
 
 export function CampaignsScreen() {
   const theme = useTheme();
@@ -59,8 +65,18 @@ type ListProps = { tab: Tab; onTab: (t: Tab) => void; refreshing: boolean; onRef
 function CampaignList({ tab, onTab, refreshing, onRefresh }: ListProps) {
   const theme = useTheme();
   const index = useCampaignIndex();
+  // Listed only once nothing newer can still be unloaded, so the order never
+  // jumps; the first few are read back until their figures are final.
+  const listable = listableCampaigns(index.campaigns, index.progress);
+  const needed = new Set(listable.slice(0, COMPLETE_FIRST).flatMap((c) => foldersToRead(c, index.progress)));
+  if (listable.length < COMPLETE_FIRST) for (const k of index.loadable) needed.add(k);
+  const loader = useLoadFolders([...needed], AUTO_LOAD);
+  const loadOlder = () => {
+    loader.more();
+    index.loadMore();
+  };
 
-  if (index.loading && index.campaigns.length === 0) {
+  if (listable.length === 0 && (index.loading || (needed.size > 0 && !loader.paused))) {
     return (
       <View style={styles.fill}>
         <Header tab={tab} onTab={onTab} counts={[]} />
@@ -72,34 +88,44 @@ function CampaignList({ tab, onTab, refreshing, onRefresh }: ListProps) {
 
   return (
     <FlatList<Campaign>
-      data={index.campaigns}
+      data={listable}
       keyExtractor={(c) => c.batchId}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={styles.list}
-      ListHeaderComponent={<Header tab={tab} onTab={onTab} counts={[index.campaigns.length]} />}
+      ListHeaderComponent={<Header tab={tab} onTab={onTab} counts={[listable.length]} />}
       renderItem={({ item }) => (
         <View style={styles.item}>
-          <CampaignCard campaign={item} onPress={() => router.push(`/campaign/${encodeURIComponent(item.batchId)}`)} />
+          <CampaignCard
+            campaign={item}
+            complete={foldersToRead(item, index.progress).length === 0}
+            onPress={() => router.push(`/campaign/${encodeURIComponent(item.batchId)}`)}
+          />
         </View>
       )}
       onEndReachedThreshold={0.4}
-      onEndReached={() => index.canLoadMore && index.loadMore()}
+      onEndReached={() => index.canLoadMore && !index.busy && index.loadMore()}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
       ListEmptyComponent={
-        <EmptyState
-          icon="campaign"
-          title="No campaigns yet"
-          description="Send one message to many people, personalised with merge fields from a CSV or Google Sheet, with automatic follow-ups."
-          actionLabel="Create a campaign"
-          onAction={() => router.push('/campaign-new')}
-        />
+        index.canLoadMore ? (
+          <ThemedText type="caption" themeColor="textMuted" style={styles.footerText}>
+            No campaigns in your most recent sent mail.
+          </ThemedText>
+        ) : (
+          <EmptyState
+            icon="campaign"
+            title="No campaigns yet"
+            description="Send one message to many people, personalised with merge fields from a CSV or Google Sheet, with automatic follow-ups."
+            actionLabel="Create a campaign"
+            onAction={() => router.push('/campaign-new')}
+          />
+        )
       }
       ListFooterComponent={
         index.canLoadMore ? (
           <View style={styles.footer}>
-            {index.loading ? <LoadingState /> : <Button title="Load older campaigns" variant="ghost" onPress={index.loadMore} />}
+            {index.busy ? <LoadingState /> : <Button title="Load older campaigns" variant="ghost" onPress={loadOlder} />}
           </View>
-        ) : index.campaigns.length > 0 ? (
+        ) : listable.length > 0 ? (
           <ThemedText type="caption" themeColor="textMuted" style={styles.footerText}>
             That is every campaign on your mailboxes.
           </ThemedText>

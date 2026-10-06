@@ -5,6 +5,7 @@ import { api } from '@/lib/convex/api';
 import { useLivePaginated } from '@/lib/convex/hooks';
 import type { Email, Id, Mailbox } from '@/lib/convex/types';
 
+import type { FolderProgress } from './history';
 import { campaignStats, type CampaignStats } from './stats';
 
 export type Campaign = {
@@ -28,6 +29,16 @@ type CampaignIndexApi = {
   canLoadMore: boolean;
   loadMore: () => void;
   byId: (batchId: string) => Campaign | undefined;
+  /** How far back each folder has been read, keyed by folderKey. */
+  progress: Record<string, FolderProgress>;
+  /** Folder keys with another page to load right now. */
+  loadable: string[];
+  /** Messages loaded so far, across every folder. */
+  loadedCount: number;
+  /** A further page is on the way. */
+  busy: boolean;
+  /** Loads the next page of each of these folders that has one. */
+  loadMoreFor: (keys: string[]) => void;
 };
 
 const CampaignIndexContext = createContext<CampaignIndexApi | null>(null);
@@ -82,7 +93,24 @@ export function CampaignIndexProvider({ children }: { children: ReactNode }) {
 
     const all = Object.values(sources);
     const expected = list.length * 2;
+    const live = Object.entries(sources).filter(([key]) => byMailbox.has(key.split(':')[0]));
+    const progress: Record<string, FolderProgress> = {};
+    for (const [key, source] of live) {
+      if (source.loading && source.items.length === 0) continue;
+      const last = source.items[source.items.length - 1];
+      progress[key] = { oldestLoaded: last ? last._creationTime : null, done: !source.canLoadMore && !source.loading };
+    }
     return {
+      progress,
+      loadable: live.filter(([, s]) => s.canLoadMore && !s.loading).map(([key]) => key),
+      loadedCount: live.reduce((n, [, s]) => n + s.items.length, 0),
+      busy: live.some(([, s]) => s.loading && s.items.length > 0),
+      loadMoreFor: (keys) => {
+        for (const key of keys) {
+          const source = sources[key];
+          if (source?.canLoadMore && !source.loading) source.loadMore();
+        }
+      },
       campaigns,
       loading: mailboxes.status === 'loading' || all.length < expected || all.some((s) => s.loading && s.items.length === 0),
       error: mailboxes.error ?? all.find((s) => s.error)?.error,
@@ -123,6 +151,31 @@ function FolderSource({
   }, [report, mailbox._id, folder, items, canLoadMore, loading, error, loadMore]);
 
   return null;
+}
+
+/**
+ * Keeps loading the given folders, one page at a time, until they run out or
+ * `limit` more messages have been loaded. `more()` allows another `limit`.
+ */
+export function useLoadFolders(keys: string[], limit: number) {
+  const { loadMoreFor, busy, loadable, loadedCount, loading } = useCampaignIndex();
+  // Counted from what was already loaded when the screen opened.
+  const [from] = useState(loadedCount);
+  const [rounds, setRounds] = useState(1);
+  const wanted = keys.filter((k) => loadable.includes(k));
+  const wantedKey = wanted.join('|');
+  const exhausted = loadedCount - from >= limit * rounds;
+
+  useEffect(() => {
+    if (loading || busy || exhausted || wantedKey === '') return;
+    loadMoreFor(wantedKey.split('|'));
+  }, [loading, busy, exhausted, wantedKey, loadMoreFor]);
+
+  return {
+    /** Stopped at the limit with folders still to read. */
+    paused: exhausted && wanted.length > 0,
+    more: () => setRounds((r) => r + 1),
+  };
 }
 
 export function useCampaignIndex(): CampaignIndexApi {

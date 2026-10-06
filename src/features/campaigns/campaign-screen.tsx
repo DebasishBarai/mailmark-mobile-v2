@@ -51,17 +51,40 @@ export function CampaignScreen({ batchId }: { batchId: string }) {
     [emails, filter],
   );
 
-  if (recipients.loading && emails.length === 0) return <LoadingState label="Loading campaign" />;
   if (recipients.error && emails.length === 0) return <ErrorState error={recipients.error} />;
+  if (!first && recipients.loading) return <LoadingState label="Loading campaign" />;
   if (!first) {
-    return (
+    return recipients.paused ? (
       <EmptyState
         icon="campaign"
         title="Campaign not found"
-        description="It may be older than the mail loaded on this device. Open Campaigns and load older campaigns, or view it on the website."
+        description="It wasn't in your most recent sent mail. It may be older."
+        actionLabel="Keep looking"
+        onAction={recipients.keepCounting}
+      />
+    ) : (
+      <EmptyState
+        icon="campaign"
+        title="Campaign not found"
+        description="It may have been sent from a mailbox you no longer have."
         actionLabel="Back to campaigns"
         onAction={() => router.back()}
       />
+    );
+  }
+  // The figures wait until every message of the campaign is loaded, so a
+  // 500 person send never reads as 100.
+  if (!recipients.complete) {
+    return recipients.paused ? (
+      <EmptyState
+        icon="campaign"
+        title="Still counting"
+        description={`This campaign is large, and ${plural(emails.length, 'recipient')} are counted so far.`}
+        actionLabel="Keep counting"
+        onAction={recipients.keepCounting}
+      />
+    ) : (
+      <LoadingState label={`Counting ${plural(emails.length, 'recipient')} so far`} />
     );
   }
 
@@ -116,12 +139,6 @@ export function CampaignScreen({ batchId }: { batchId: string }) {
           <Badge label={SEQUENCE_STATUS[followUp.status].label} tone={SEQUENCE_STATUS[followUp.status].tone} />
           <Icon name="chevronRight" size={14} color={theme.textMuted} />
         </Pressable>
-      ) : null}
-
-      {!recipients.complete ? (
-        <ThemedText type="caption" themeColor="textMuted">
-          Figures cover the {plural(emails.length, 'recipient')} found in the sent mail loaded so far. Load older campaigns on the Campaigns screen to include the rest of a very large send.
-        </ThemedText>
       ) : null}
 
       <Segmented scrollable value={filter} onChange={setFilter} options={FILTERS.map((f) => ({ ...f, count: emails.filter((e) => matchesFilter(e, f.value)).length }))} />
