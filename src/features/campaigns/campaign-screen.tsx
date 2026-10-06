@@ -13,6 +13,7 @@ import type { Email } from '@/lib/convex/types';
 import { rawEmail } from '@/lib/email/address';
 import { fullDate, listDate, plural } from '@/lib/format';
 
+import { matchFollowUp } from './history';
 import { SEQUENCE_STATUS } from './sequence-card';
 import { campaignStats, matchesFilter, rate, type RecipientFilter } from './stats';
 import { useCampaignRecipients } from './use-campaign-recipients';
@@ -40,10 +41,10 @@ export function CampaignScreen({ batchId }: { batchId: string }) {
   const mailbox = mailboxes.data?.find((m) => m._id === first?.mailboxId);
   const followUp = useMemo(
     () =>
-      first
-        ? sequences.data?.find((s) => s.mailboxId === first.mailboxId && s.name === `Follow-up: ${first.subject.slice(0, 50)}`)
-        : undefined,
-    [sequences.data, first],
+      first && sequences.data
+        ? matchFollowUp({ batchId, mailboxId: first.mailboxId, subject: first.subject }, sequences.data)
+        : null,
+    [sequences.data, first, batchId],
   );
   const filtered = useMemo(
     () => emails.filter((e) => matchesFilter(e, filter)).sort((a, b) => a.to[0]?.localeCompare(b.to[0] ?? '') ?? 0),
