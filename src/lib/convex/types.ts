@@ -53,6 +53,8 @@ export type Domain = SystemFields<'domains'> & {
   lastVerificationCheckAt?: number;
   lastVerificationError?: string;
   awsAccountId?: Id<'awsAccounts'>;
+  /** The business mailing address shown in the footer of campaign and follow-up emails (CAN-SPAM). */
+  postalAddress?: string;
 };
 
 /** `domains.getById` adds the SES region the domain's identity lives in. */

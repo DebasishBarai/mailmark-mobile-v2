@@ -187,6 +187,8 @@ export const api = {
       'domainActions:retryMailFromVerification',
     ),
     remove: action<{ domainId: Id<'domains'> }>('domainActions:remove'),
+    // Saves the address as one tidy line and returns it; an empty address clears it.
+    setPostalAddress: mutation<{ domainId: Id<'domains'>; postalAddress: string }, string>('domains:setPostalAddress'),
   },
 
   domainHealth: {

@@ -27,9 +27,18 @@ const PLACEHOLDER = /\[[^[\]\n]{1,80}\]/g;
 // Case and spacing don't matter: "[Phone  Number]" is still the template's.
 const normalise = (p: string) => p.replace(/\s+/g, ' ').trim().toLowerCase();
 
-/** Every placeholder the templates ship with, plus the one used when the mailbox has no business name. */
+/**
+ * Every placeholder the templates ship with, plus the one used when the
+ * mailbox has no business name, and "[Your business address]", which the
+ * templates had before the footer carried the domain's mailing address: a
+ * message written then (and brought back by Send again) must still not send it.
+ */
 const TEMPLATE_PLACEHOLDERS = new Set(
-  [...CAMPAIGN_TEMPLATES.flatMap((t) => `${t.subject}\n${t.text}`.match(PLACEHOLDER) ?? []), '[Your business name]'].map(normalise),
+  [
+    ...CAMPAIGN_TEMPLATES.flatMap((t) => `${t.subject}\n${t.text}`.match(PLACEHOLDER) ?? []),
+    '[Your business name]',
+    '[Your business address]',
+  ].map(normalise),
 );
 
 export function findUnfilledPlaceholders(subject: string, body: string): string[] {

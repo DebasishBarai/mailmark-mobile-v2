@@ -36,7 +36,6 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
       '',
       'Thanks,',
       '%BUSINESS%',
-      '[Your business address]',
     ].join('\n'),
   },
   {
@@ -53,7 +52,6 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
       '',
       'Thanks,',
       '%BUSINESS%',
-      '[Your business address]',
     ].join('\n'),
   },
   {
@@ -70,7 +68,6 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
       '',
       'Thanks,',
       '%BUSINESS%',
-      '[Your business address]',
     ].join('\n'),
   },
 ];
