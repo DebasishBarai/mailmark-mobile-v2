@@ -21,6 +21,7 @@ import { timeAgo } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 
 import { DNS_RECORD_GROUPS, canRetryMailFrom, dnsRecords, fullHost, zoneFile, type DnsRecord, type DnsRecordGroup } from './dns';
+import { RemovalNotice } from './removal-notice';
 
 export function DomainScreen({ id }: { id: string }) {
   const { key, refreshing, refresh } = useRefreshKey();
@@ -155,6 +156,9 @@ function DomainDetail({ domain, refreshing, onRefresh }: { domain: DomainWithReg
             {domain.lastVerificationError}
           </ThemedText>
         ) : null}
+        {/* The nightly cleanup removes domains still unverified after 7 days,
+            and nothing else tells the owner (see src/lib/domain-removal.ts). */}
+        {!domain.verified ? <RemovalNotice createdAt={domain._creationTime} domainId={domain._id} domain={domain.domain} /> : null}
         {!domain.verified ? (
           <ThemedText type="small" themeColor="textSecondary">
             Add the required records below at your DNS provider first. Tap a value to copy it. Changes usually appear within minutes but can take up to 48 hours.
