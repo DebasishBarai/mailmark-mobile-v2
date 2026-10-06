@@ -20,6 +20,7 @@ import type { DomainWithRegion, Id } from '@/lib/convex/types';
 import { timeAgo } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 
+import { ADDRESS_WHY, BusinessAddressForm } from './business-address';
 import { DNS_RECORD_GROUPS, canRetryMailFrom, dnsRecords, fullHost, zoneFile, type DnsRecord, type DnsRecordGroup } from './dns';
 import { RemovalNotice } from './removal-notice';
 
@@ -201,6 +202,10 @@ function DomainDetail({ domain, refreshing, onRefresh }: { domain: DomainWithReg
           />
         </Group>
       ) : null}
+
+      <Group title="Business mailing address" footer={`${ADDRESS_WHY.replace('you send.', `you send from ${domain.domain}.`)} A P.O. box is fine.`}>
+        <BusinessAddressForm domainId={domain._id} saved={domain.postalAddress} />
+      </Group>
 
       <Group
         title="Mailboxes"
