@@ -23,6 +23,7 @@ import { haptic } from '@/lib/haptics';
 
 import { mergeRecipients, useCampaignDraft, type MergeRecipient } from './draft';
 import { fetchSheet, interpretCsv } from './import';
+import { groupToRecipients, nameColumns } from './saved-list';
 import { StepFooter } from './step-footer';
 
 type Mode = null | 'paste' | 'sheet';
@@ -112,7 +113,11 @@ export function AudienceScreen() {
       options: available.map((g) => ({
         label: `${g.name} (${g.emails.length})`,
         icon: 'team' as const,
-        onPress: () => add(g.emails.map((email) => ({ email, fields: { email } })), [], g.name),
+        onPress: () => {
+          // Names saved with the list come back, so {{firstName}} works again.
+          const recipients = groupToRecipients(g);
+          add(recipients, nameColumns(recipients, draft.columns), g.name);
+        },
       })),
     });
   };

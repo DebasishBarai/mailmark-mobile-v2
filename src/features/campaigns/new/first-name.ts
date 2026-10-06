@@ -40,3 +40,23 @@ export function withFirstName(fields: Record<string, string>): Record<string, st
   }
   return fields;
 }
+
+const LAST_NAME_KEY = /^(last[\s_-]?name|surname|family[\s_-]?name)$/i;
+
+/**
+ * A recipient's full name from whatever the import gave: a name column,
+ * first and last name columns, or a first name alone. Empty when nothing
+ * names them. Ported from nameOf in the website's lib/campaign/audience.ts.
+ */
+export function nameOf(fields: Record<string, string>): string {
+  const keys = Object.keys(fields);
+  const value = (re: RegExp) => {
+    const key = keys.find((k) => re.test(k.trim()) && fields[k]?.trim());
+    return key ? fields[key].trim() : '';
+  };
+  const full = fields.name?.trim() || value(FULL_NAME_KEY);
+  if (full) return full;
+  const first = value(FIRST_NAME_KEY) || fields.firstName?.trim() || '';
+  const last = value(LAST_NAME_KEY);
+  return [first, last].filter(Boolean).join(' ');
+}
