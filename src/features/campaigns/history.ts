@@ -1,4 +1,4 @@
-import type { Sequence } from '@/lib/convex/types';
+import type { Email, Sequence } from '@/lib/convex/types';
 
 import type { Campaign } from './campaign-index';
 
@@ -101,4 +101,57 @@ export function listableCampaigns<C extends Pick<Campaign, 'emails'>>(campaigns:
     if (!p.done && p.oldestLoaded !== null) horizon = Math.max(horizon, p.oldestLoaded);
   }
   return campaigns.filter((c) => Math.min(...c.emails.map((e) => e._creationTime)) >= horizon);
+}
+
+// Not 'accent': the brand accent is red, so an open would read as a problem.
+export type RecipientTone = 'muted' | 'success' | 'info' | 'danger';
+
+const BLOCK_TEXT: Record<string, string> = {
+  suppressed_hard_bounce: 'an earlier email to this address bounced back',
+  suppressed_complaint: 'they marked an earlier email as spam',
+  suppressed_manual: 'it is on your do-not-email list',
+  unsubscribed: 'they unsubscribed',
+  invalid_address: 'this address does not exist',
+  disposable_address: 'it is a temporary throwaway address',
+  catch_all_blocked: 'we could not confirm this address exists',
+  unknown_blocked: 'we could not confirm this address exists',
+  malformed_address: 'it is not a complete email address',
+  verifier_unavailable: 'we could not check the address at the time',
+  verifier_not_configured: 'we could not check the address at the time',
+  sending_paused: 'sending was paused',
+  account_suspended: 'sending was paused on this account',
+  awaiting_verification: 'we were still checking the address',
+};
+
+function bounceText(e: Pick<Email, 'bounceType' | 'bounceSubType'>): string {
+  if (e.bounceType === 'Transient') {
+    return e.bounceSubType === 'MailboxFull' ? 'their mailbox is full' : 'their email server turned it away for now';
+  }
+  if (e.bounceSubType === 'Suppressed' || e.bounceSubType === 'OnAccountSuppressionList') return 'an earlier email to this address bounced back';
+  if (e.bounceType === 'Permanent') return 'this address does not exist';
+  return 'their email server turned it away';
+}
+
+function day(ms: number): string {
+  return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+/** What happened to one customer's message, in words for the owner. Same wording as the website. */
+export function recipientStatus(e: Email): { label: string; tone: RecipientTone } {
+  if (e.folder === 'outbox') return { label: e.scheduledAt ? `Scheduled for ${day(e.scheduledAt)}` : 'Scheduled', tone: 'muted' };
+  switch (e.deliveryStatus) {
+    case 'blocked':
+      return { label: `Not sent: ${BLOCK_TEXT[e.blockReason ?? ''] ?? 'this address cannot get email from you'}`, tone: 'danger' };
+    case 'bounced':
+      return { label: `Didn't arrive: ${bounceText(e)}`, tone: 'danger' };
+    case 'failed':
+      return { label: "Didn't arrive: sending failed", tone: 'danger' };
+    case 'complained':
+      return { label: 'Marked it as spam', tone: 'danger' };
+  }
+  if (e.repliedAt) return { label: `Replied ${day(e.repliedAt)}`, tone: 'success' };
+  if ((e.clickedLinks?.length ?? 0) > 0) return { label: 'Clicked a link', tone: 'success' };
+  if (e.openedAt) return { label: `Opened ${day(e.openedAt)}`, tone: 'info' };
+  if (e.deliveryStatus === 'delivered') return { label: 'Delivered, not opened yet', tone: 'muted' };
+  return { label: 'On its way', tone: 'muted' };
 }

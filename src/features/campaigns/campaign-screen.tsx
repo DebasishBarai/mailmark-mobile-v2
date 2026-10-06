@@ -11,9 +11,9 @@ import { useWorkspace } from '@/features/workspace/workspace';
 import { useTheme } from '@/hooks/use-theme';
 import type { Email } from '@/lib/convex/types';
 import { rawEmail } from '@/lib/email/address';
-import { fullDate, listDate, plural } from '@/lib/format';
+import { fullDate, plural } from '@/lib/format';
 
-import { matchFollowUp } from './history';
+import { matchFollowUp, recipientStatus } from './history';
 import { SEQUENCE_STATUS } from './sequence-card';
 import { campaignStats, matchesFilter, rate, type RecipientFilter } from './stats';
 import { useCampaignRecipients } from './use-campaign-recipients';
@@ -114,11 +114,16 @@ export function CampaignScreen({ batchId }: { batchId: string }) {
       </View>
 
       {sent > 0 ? <Funnel sent={sent} delivered={stats.delivered} opened={stats.opened} clicked={stats.clicked} replied={stats.replied} /> : null}
+      {sent > 0 ? (
+        <ThemedText type="caption" themeColor="textMuted">
+          Opens are a rough guide: some email apps open every message automatically. Replies are the surest sign.
+        </ThemedText>
+      ) : null}
 
       {stats.complained + stats.blocked > 0 ? (
         <Card style={{ backgroundColor: theme.warningSoft, borderColor: theme.warningSoft }}>
           <ThemedText type="small" themeColor="warning">
-            {stats.blocked > 0 ? `${plural(stats.blocked, 'recipient')} not sent (suppressed, unsubscribed or failed verification). ` : ''}
+            {stats.blocked > 0 ? `${plural(stats.blocked, 'recipient')} not sent, for example because they unsubscribed or the address doesn't exist. ` : ''}
             {stats.complained > 0 ? `${plural(stats.complained, 'recipient')} marked this as spam.` : ''}
           </ThemedText>
         </Card>
@@ -214,28 +219,23 @@ function RecipientRow({ email }: { email: Email }) {
   const toneColor = useToneColor();
   const state = deliveryState(email);
   const meta = state ? DELIVERY_META[state] : null;
+  // What happened, in words: "Didn't arrive: this address does not exist".
+  const status = recipientStatus(email);
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={`${email.to.map(rawEmail).join(', ')}. ${status.label}`}
       onPress={() => router.push(emailHref(email))}
       style={({ pressed }) => [styles.recipient, pressed && { backgroundColor: theme.backgroundSelected }]}>
+      {meta ? <Icon name={meta.icon} size={14} color={toneColor(status.tone)} /> : null}
       <View style={styles.flex}>
         <ThemedText type="body" numberOfLines={1}>
           {email.to.map(rawEmail).join(', ')}
         </ThemedText>
-        <ThemedText type="caption" themeColor="textMuted">
-          {listDate(email.repliedAt ?? email.openedAt ?? email.date)}
-          {email.clickedLinks?.length ? ` · ${plural(email.clickedLinks.length, 'click')}` : ''}
+        <ThemedText type="caption" color={toneColor(status.tone)}>
+          {status.label}
         </ThemedText>
       </View>
-      {meta ? (
-        <View style={styles.status}>
-          <Icon name={meta.icon} size={13} color={toneColor(meta.tone)} />
-          <ThemedText type="caption" color={toneColor(meta.tone)}>
-            {meta.label}
-          </ThemedText>
-        </View>
-      ) : null}
     </Pressable>
   );
 }
