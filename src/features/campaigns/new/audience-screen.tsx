@@ -162,6 +162,14 @@ export function AudienceScreen() {
             Step 1 of 4 · Who receives this campaign
           </ThemedText>
 
+          {draft.notice ? (
+            <Card style={{ backgroundColor: theme.infoSoft, borderColor: theme.infoSoft }}>
+              <ThemedText type="small" themeColor="info">
+                {draft.notice}
+              </ThemedText>
+            </Card>
+          ) : null}
+
           <Group title="Send from">
             <ListRow
               title={mailbox?.displayName || mailbox?.address || 'No mailbox'}
@@ -212,7 +220,7 @@ export function AudienceScreen() {
                   variant="ghost"
                   size="sm"
                   onPress={() => {
-                    update({ recipients: [], columns: [], sourceLabel: null });
+                    update({ recipients: [], columns: [], sourceLabel: null, notice: null });
                     setVerdicts(null);
                   }}
                 />

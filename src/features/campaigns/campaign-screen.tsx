@@ -1,6 +1,8 @@
+import { useConvex } from 'convex/react';
+import type { PaginationResult } from 'convex/server';
 import { Stack, router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Badge, Button, Card, EmptyState, ErrorState, Icon, LoadingState, Segmented } from '@/components/ui';
@@ -9,13 +11,17 @@ import { DELIVERY_META, deliveryState, useToneColor } from '@/features/mail/deli
 import { emailHref } from '@/features/mail/use-email';
 import { useWorkspace } from '@/features/workspace/workspace';
 import { useTheme } from '@/hooks/use-theme';
-import type { Email } from '@/lib/convex/types';
+import { api } from '@/lib/convex/api';
+import type { Email, SequenceEnrollment } from '@/lib/convex/types';
 import { rawEmail } from '@/lib/email/address';
 import { fullDate, plural } from '@/lib/format';
 
 import { matchFollowUp, recipientStatus } from './history';
+import { setCampaignHandoff } from './new/handoff';
+import { notOpenedEmails, recallCampaignMessage, recipientColumns, sendAgainRecipients, splitSignature } from './send-again';
 import { SEQUENCE_STATUS } from './sequence-card';
 import { campaignStats, matchesFilter, rate, type RecipientFilter } from './stats';
+import type { CampaignDraft } from './new/draft';
 import { useCampaignRecipients } from './use-campaign-recipients';
 import { useSequences } from './use-sequences';
 
@@ -46,6 +52,88 @@ export function CampaignScreen({ batchId }: { batchId: string }) {
         : null,
     [sequences.data, first, batchId],
   );
+  const notOpened = useMemo(() => notOpenedEmails(emails), [emails]);
+  const convex = useConvex();
+  const [preparing, setPreparing] = useState(false);
+
+  // Opens New campaign with the people who didn't open and, where it can be
+  // found, the message as it was written (see send-again.ts).
+  const prepareSendAgain = async () => {
+    if (!first) return;
+    setPreparing(true);
+    try {
+      // A subject with a merge field reaches each customer filled in ("Hi
+      // John"), so a sent copy's subject is only the campaign's when they all match.
+      const sameSubject = emails.every((e) => e.subject === first.subject);
+      const which = sameSubject ? `"${first.subject}"` : 'this campaign';
+      let subject = sameSubject ? first.subject : '';
+      let body = '';
+      let contentType: CampaignDraft['contentType'] = 'rich';
+      let includeSignature = true;
+      let found = false;
+      let fieldsByEmail: Record<string, Record<string, unknown>> = {};
+      const remembered = await recallCampaignMessage(batchId);
+      const firstStep = followUp?.steps.find((step) => step.type === 'send_email');
+      if (remembered) {
+        ({ subject, body, contentType, includeSignature } = remembered);
+        fieldsByEmail = remembered.fields ?? {};
+        found = true;
+      } else if (followUp && firstStep?.type === 'send_email') {
+        subject = firstStep.subject;
+        ({ body, includeSignature } = splitSignature(firstStep.html));
+        found = true;
+        // Names and columns travel with each follow-up contact.
+        try {
+          let cursor: string | null = null;
+          for (let pages = 0; pages < 20; pages++) {
+            const result: PaginationResult<SequenceEnrollment> = await convex.query(api.sequences.listEnrollmentsPage, {
+              sequenceId: followUp._id,
+              paginationOpts: { numItems: 500, cursor },
+            });
+            for (const e of result.page) {
+              if (e.mergeFields && typeof e.mergeFields === 'object') fieldsByEmail[e.contactEmail.toLowerCase()] = e.mergeFields;
+            }
+            if (result.isDone) break;
+            cursor = result.continueCursor;
+          }
+        } catch {
+          // Without names the greeting falls back, e.g. "Hi there".
+        }
+      }
+      const recipients = sendAgainRecipients(notOpened, fieldsByEmail);
+      const handoff = setCampaignHandoff({
+        mailboxId: first.mailboxId,
+        recipients,
+        columns: recipientColumns(recipients),
+        sourceLabel: `Didn't open ${which}`,
+        subject,
+        body,
+        contentType,
+        includeSignature,
+        notice: found
+          ? `Sending again to ${plural(recipients.length, 'customer')} who didn't open ${which}. The same message is filled in: check it, then send.`
+          : `Sending again to ${plural(recipients.length, 'customer')} who didn't open ${which}. The message as you wrote it isn't saved anywhere this app can reach, so write it again in the next step.${sameSubject ? ' The subject is filled in.' : ''}`,
+      });
+      router.push({ pathname: '/campaign-new', params: { mailboxId: first.mailboxId, handoff } });
+    } finally {
+      setPreparing(false);
+    }
+  };
+
+  const sendAgain = () => {
+    if (followUp?.status !== 'active') return void prepareSendAgain();
+    const message = "This campaign's follow-ups are still going out to people who haven't replied. Send a new campaign to those who didn't open anyway?";
+    // Alert does nothing on the web build.
+    if (process.env.EXPO_OS === 'web') {
+      if (window.confirm(message)) void prepareSendAgain();
+      return;
+    }
+    Alert.alert('Send again?', message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Send again', onPress: () => void prepareSendAgain() },
+    ]);
+  };
+
   const filtered = useMemo(
     () => emails.filter((e) => matchesFilter(e, filter)).sort((a, b) => a.to[0]?.localeCompare(b.to[0] ?? '') ?? 0),
     [emails, filter],
@@ -144,6 +232,16 @@ export function CampaignScreen({ batchId }: { batchId: string }) {
           <Badge label={SEQUENCE_STATUS[followUp.status].label} tone={SEQUENCE_STATUS[followUp.status].tone} />
           <Icon name="chevronRight" size={14} color={theme.textMuted} />
         </Pressable>
+      ) : null}
+
+      {notOpened.length > 0 ? (
+        <Button
+          title={`Send again to ${notOpened.length.toLocaleString()} who didn't open`}
+          icon="send"
+          loading={preparing}
+          disabled={preparing}
+          onPress={sendAgain}
+        />
       ) : null}
 
       <Segmented scrollable value={filter} onChange={setFilter} options={FILTERS.map((f) => ({ ...f, count: emails.filter((e) => matchesFilter(e, f.value)).length }))} />

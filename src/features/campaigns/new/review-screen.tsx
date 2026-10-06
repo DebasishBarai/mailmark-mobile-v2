@@ -19,6 +19,7 @@ import { haptic } from '@/lib/haptics';
 import { exitModalStack } from '@/lib/navigation';
 import { extractMergeFields } from '@/lib/merge-fields';
 
+import { rememberCampaignMessage } from '../send-again';
 import { useCampaignDraft } from './draft';
 import { newBatchId, sendCampaign, type SendProgress } from './send-campaign';
 
@@ -45,6 +46,13 @@ export function ReviewScreen() {
     if (!mailbox) return;
     cancelled.current = false;
     const batchId = newBatchId();
+    // Sent copies are personalised, so keep the message as written for the
+    // campaign screen's "Send again" (on this device only).
+    void rememberCampaignMessage(
+      batchId,
+      { subject: draft.subject, body: draft.body, contentType: draft.contentType, includeSignature: draft.includeSignature, recipients: draft.recipients },
+      Date.now(),
+    );
     setPhase({ kind: 'sending', progress: { done: 0, total: draft.recipients.length, failed: [] }, scheduledAt });
     try {
       const progress = await sendCampaign(draft, mailbox, { sendEmail, scheduleEmail, createSequence }, {
