@@ -114,11 +114,16 @@ export type AttachmentData = { filename: string; contentType: string; data: stri
 
 export type OutgoingAttachment = { filename: string; contentType: string; data: string };
 
+/** A saved customer's name, kept with the list so {{firstName}} works when it is picked. */
+export type GroupContact = { email: string; name: string };
+
 export type SenderGroup = SystemFields<'senderGroups'> & {
   domainId: Id<'domains'>;
   mailboxIds: Id<'mailboxes'>[];
   name: string;
   emails: string[];
+  /** Names for some or all of `emails`; absent on lists saved without names. */
+  contacts?: GroupContact[];
 };
 
 export type SequenceStep =
