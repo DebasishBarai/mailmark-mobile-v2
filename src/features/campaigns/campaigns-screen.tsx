@@ -5,6 +5,7 @@ import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Button, EmptyState, ErrorState, IconButton, ListSkeleton, LoadingState, Segmented } from '@/components/ui';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { SetupChecklist } from '@/features/setup/setup-checklist';
 import { useTheme } from '@/hooks/use-theme';
 import { useRefreshKey } from '@/lib/convex/hooks';
 import type { Sequence } from '@/lib/convex/types';
@@ -48,6 +49,8 @@ export function CampaignsScreen() {
 function Header({ tab, onTab, counts }: { tab: Tab; onTab: (t: Tab) => void; counts: [number?, number?] }) {
   return (
     <View style={styles.header}>
+      {/* Until the account has sent its first campaign (or the owner hides it). */}
+      <SetupChecklist style={styles.setup} />
       <Segmented
         value={tab}
         onChange={onTab}
@@ -180,6 +183,9 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingBottom: Spacing.three,
+  },
+  setup: {
+    marginBottom: Spacing.four,
   },
   list: {
     padding: Spacing.four,
