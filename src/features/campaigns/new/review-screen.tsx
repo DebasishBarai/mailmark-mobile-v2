@@ -4,16 +4,19 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { Stack, router } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
 import { useActionSheet } from '@/components/feedback/action-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Group, Icon, ListRow, ProgressBar } from '@/components/ui';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { schedulePresets } from '@/features/compose/schedule';
+import { ADDRESS_WHY, BusinessAddressForm } from '@/features/domains/business-address';
 import { useWorkspace } from '@/features/workspace/workspace';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/convex/api';
 import { errorMessage } from '@/lib/convex/errors';
+import { useLiveQuery } from '@/lib/convex/hooks';
 import { fullDate, plural } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { exitModalStack } from '@/lib/navigation';
@@ -47,10 +50,16 @@ export function ReviewScreen() {
     ...findUnfilledPlaceholders(draft.subject, draft.body),
     ...draft.followUps.flatMap((f) => findUnfilledPlaceholders(f.subject, f.body)),
   ].filter((p, i, all) => all.indexOf(p) === i);
-  const blocked = !mailbox || placeholders.length > 0;
+  // The sending domain's mailing address goes in every email's footer, and US
+  // law (CAN-SPAM) requires one, so a campaign waits until it is saved, as on
+  // the website. A domain the app cannot read is not something the owner can
+  // fix here, so it never blocks.
+  const domain = useLiveQuery(api.domains.getById, mailbox ? { domainId: mailbox.domainId } : 'skip');
+  const needsAddress = domain.status === 'loading' || (domain.status === 'success' && !!domain.data && !domain.data.postalAddress);
+  const blocked = !mailbox || placeholders.length > 0 || needsAddress;
 
   const start = async (scheduledAt?: number) => {
-    if (!mailbox) return;
+    if (!mailbox || needsAddress) return;
     cancelled.current = false;
     const batchId = newBatchId();
     // Sent copies are personalised, so keep the message as written for the
@@ -107,7 +116,7 @@ export function ReviewScreen() {
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ title: 'Review' }} />
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scroll}>
         <View style={styles.inner}>
           <ThemedText type="small" themeColor="textSecondary">
             Step 4 of 4 · Check everything before it goes out
@@ -122,7 +131,20 @@ export function ReviewScreen() {
               icon="merge"
             />
             <ListRow title="Follow-ups" value={draft.followUps.length ? String(draft.followUps.length) : 'None'} icon="sequence" onPress={() => router.back()} />
+            {domain.data?.postalAddress ? <ListRow title="Mailing address" subtitle={domain.data.postalAddress} icon="domain" /> : null}
           </Group>
+
+          {domain.data && !domain.data.postalAddress ? (
+            <Card padded={false} style={{ backgroundColor: theme.warningSoft, borderColor: theme.warningSoft }}>
+              <View style={styles.addressIntro}>
+                <ThemedText type="smallStrong">Add your business mailing address to send</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {ADDRESS_WHY} A P.O. box is fine. You only do this once, and can change it on the {domain.data.domain} domain screen.
+                </ThemedText>
+              </View>
+              <BusinessAddressForm domainId={domain.data._id} />
+            </Card>
+          ) : null}
 
           <Card style={styles.note}>
             <Icon name="shield" size={16} color={theme.textSecondary} />
@@ -165,7 +187,7 @@ export function ReviewScreen() {
             </Card>
           ) : null}
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }
@@ -259,6 +281,11 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     padding: Spacing.four,
     gap: Spacing.four,
+  },
+  addressIntro: {
+    gap: Spacing.one,
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.three,
   },
   note: {
     flexDirection: 'row',
