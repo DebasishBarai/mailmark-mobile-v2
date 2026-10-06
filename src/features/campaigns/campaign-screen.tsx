@@ -5,20 +5,23 @@ import { useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Badge, Button, Card, EmptyState, ErrorState, Icon, LoadingState, Segmented } from '@/components/ui';
+import { useToast } from '@/components/feedback/toast';
+import { Badge, Button, Card, EmptyState, ErrorState, Icon, IconButton, LoadingState, Segmented } from '@/components/ui';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { DELIVERY_META, deliveryState, useToneColor } from '@/features/mail/delivery-status';
 import { emailHref } from '@/features/mail/use-email';
 import { useWorkspace } from '@/features/workspace/workspace';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/convex/api';
+import { errorMessage } from '@/lib/convex/errors';
 import type { Email, SequenceEnrollment } from '@/lib/convex/types';
 import { rawEmail } from '@/lib/email/address';
 import { fullDate, plural } from '@/lib/format';
 
-import { matchFollowUp, recipientStatus } from './history';
+import { campaignCsv, matchFollowUp, recipientStatus } from './history';
 import { setCampaignHandoff } from './new/handoff';
 import { notOpenedEmails, recallCampaignMessage, recipientColumns, sendAgainRecipients, splitSignature } from './send-again';
+import { shareCampaignCsv } from './share-csv';
 import { SEQUENCE_STATUS } from './sequence-card';
 import { campaignStats, matchesFilter, rate, type RecipientFilter } from './stats';
 import type { CampaignDraft } from './new/draft';
@@ -54,6 +57,7 @@ export function CampaignScreen({ batchId }: { batchId: string }) {
   );
   const notOpened = useMemo(() => notOpenedEmails(emails), [emails]);
   const convex = useConvex();
+  const toast = useToast();
   const [preparing, setPreparing] = useState(false);
 
   // Opens New campaign with the people who didn't open and, where it can be
@@ -120,6 +124,14 @@ export function CampaignScreen({ batchId }: { batchId: string }) {
     }
   };
 
+  const shareCsv = () => {
+    // Named after the subject only when it is the same for everyone (no merge field in it).
+    const subject = first && emails.every((e) => e.subject === first.subject) ? first.subject : '';
+    shareCampaignCsv(campaignCsv(emails), subject).catch((err: unknown) =>
+      toast.show({ message: errorMessage(err, 'The CSV could not be shared.'), tone: 'error' }),
+    );
+  };
+
   const sendAgain = () => {
     if (followUp?.status !== 'active') return void prepareSendAgain();
     const message = "This campaign's follow-ups are still going out to people who haven't replied. Send a new campaign to those who didn't open anyway?";
@@ -181,7 +193,12 @@ export function CampaignScreen({ batchId }: { batchId: string }) {
 
   const header = (
     <View style={styles.headerContent}>
-      <Stack.Screen options={{ title: 'Campaign' }} />
+      <Stack.Screen
+        options={{
+          title: 'Campaign',
+          headerRight: () => <IconButton icon="share" label="Share as CSV" color={theme.accent} onPress={shareCsv} />,
+        }}
+      />
       <View style={styles.titleBlock}>
         <ThemedText type="title">{first.subject || '(no subject)'}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">

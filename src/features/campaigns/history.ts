@@ -155,3 +155,22 @@ export function recipientStatus(e: Email): { label: string; tone: RecipientTone 
   if (e.deliveryStatus === 'delivered') return { label: 'Delivered, not opened yet', tone: 'muted' };
   return { label: 'On its way', tone: 'muted' };
 }
+
+function csvCell(value: string): string {
+  // Leading =, +, - or @ would run as a formula in a spreadsheet.
+  const safe = /^[=+\-@]/.test(value) ? `'${value}` : value;
+  return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+}
+
+function iso(ms: number | undefined): string {
+  return ms ? new Date(ms).toISOString() : '';
+}
+
+/** The campaign's customers and what happened, as a CSV file's contents. Same columns as the website's. */
+export function campaignCsv(emails: Email[]): string {
+  const rows = [['Email', 'Status', 'Opened at', 'Replied at']];
+  for (const e of emails) {
+    rows.push([e.to.join('; '), recipientStatus(e).label, iso(e.openedAt), iso(e.repliedAt)]);
+  }
+  return rows.map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
+}
