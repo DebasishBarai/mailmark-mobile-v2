@@ -179,7 +179,7 @@ export function AudienceScreen() {
             />
           </Group>
 
-          <Group title="Add recipients" footer="A CSV or sheet with a header row becomes a mail merge: every column can be used as {Column} in the subject and body.">
+          <Group title="Add recipients" footer="A CSV or sheet with a header row becomes a mail merge: every column can be used as {{Column}} in the subject and body.">
             <ListRow title="Import a CSV file" subtitle="From Files, Drive or iCloud" icon="table" iconTint="#3f6b44" onPress={importCsv} disabled={busy !== null} />
             <ListRow title="Google Sheets link" subtitle="Shared as “Anyone with the link”" icon="link" iconTint="#3a5f8a" onPress={() => setMode(mode === 'sheet' ? null : 'sheet')} />
             <ListRow title="Paste addresses" subtitle="Any text containing email addresses" icon="copy" iconTint="#8a5a2b" onPress={() => setMode(mode === 'paste' ? null : 'paste')} />
