@@ -200,6 +200,9 @@ export type Subscription = SystemFields<'subscriptions'> & {
   trialEndsAt?: number;
   cancelAtPeriodEnd?: boolean;
   dodoSubscriptionId?: string;
+  /** Set when the plan is an in-app purchase; absent means billed on the web. */
+  store?: 'app_store' | 'play_store';
+  storeProductId?: string;
 };
 
 export type SubscriptionStatus = {

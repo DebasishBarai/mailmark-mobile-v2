@@ -6,12 +6,14 @@ import { ThemedText } from '@/components/themed-text';
 import { Avatar, Badge, Group, ListRow, Screen } from '@/components/ui';
 import { Radius, Spacing } from '@/constants/theme';
 import { useSession } from '@/features/auth/session';
+import { useDeleteAccount } from '@/features/settings/use-delete-account';
 import { WebLinks } from '@/lib/config';
 import { shortDate } from '@/lib/format';
 
 export function AccountScreen() {
   const { user: clerkUser } = useUser();
   const { user, signOut } = useSession();
+  const { confirmDelete, deleting } = useDeleteAccount();
   const name = user?.name || clerkUser?.fullName || '';
   const email = user?.email ?? clerkUser?.primaryEmailAddress?.emailAddress ?? '';
 
@@ -54,6 +56,17 @@ export function AccountScreen() {
               { text: 'Sign out', style: 'destructive', onPress: () => void signOut() },
             ])
           }
+        />
+      </Group>
+
+      <Group footer="Permanently deletes your account and everything in it, here and on the website.">
+        <ListRow
+          title={deleting ? 'Deleting account…' : 'Delete account'}
+          icon="trash"
+          destructive
+          showChevron={false}
+          disabled={deleting}
+          onPress={confirmDelete}
         />
       </Group>
     </Screen>

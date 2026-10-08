@@ -5,6 +5,7 @@ import { createContext, use, useCallback, useEffect, useMemo, useRef, useState, 
 import { api } from '@/lib/convex/api';
 import { useLiveQuery } from '@/lib/convex/hooks';
 import type { User } from '@/lib/convex/types';
+import { forget as forgetPurchases } from '@/lib/purchases';
 import { local } from '@/lib/storage';
 
 type SignOutHook = () => Promise<void>;
@@ -82,6 +83,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
     await local.remove('lastMailbox');
     await local.remove('drafts');
+    await forgetPurchases();
     await clerk.signOut();
   }, [clerk]);
 

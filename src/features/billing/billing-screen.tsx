@@ -11,9 +11,12 @@ import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/convex/api';
 import { errorMessage } from '@/lib/convex/errors';
 import { useLiveQuery } from '@/lib/convex/hooks';
+import { WebLinks } from '@/lib/config';
 import { shortDate } from '@/lib/format';
+import { freeTrialLabel, manageSubscriptions, storeName } from '@/lib/purchases';
 
 import { PLAN_DETAILS, planName } from './plans';
+import { useStorePlans } from './use-store-plans';
 
 type PaidPlan = keyof typeof PLAN_DETAILS;
 
@@ -24,6 +27,7 @@ export function BillingScreen() {
   const usage = useLiveQuery(api.quotas.getUsageAndLimits, {});
   const checkout = useAction(api.subscriptions.createCheckoutSession);
   const cancel = useAction(api.subscriptions.cancelViaDodo);
+  const store = useStorePlans();
   const [busy, setBusy] = useState<string | null>(null);
 
   if (status.status === 'loading' || usage.status === 'loading') return <LoadingState />;
@@ -33,8 +37,21 @@ export function BillingScreen() {
   const sub = s?.subscription;
   const live = sub && (sub.status === 'active' || sub.status === 'trialing');
   const u = usage.data;
+  // In a store build, a live plan bought on the website is shown but not
+  // changed here: changing it would be a purchase outside the store.
+  const webBilledInStoreBuild = store.available && live && sub?.store === undefined;
+  const storeBilled = live && sub?.store !== undefined;
 
   const choose = async (plan: PaidPlan) => {
+    if (store.available) {
+      try {
+        const bought = await store.purchase(plan, live ? sub : null);
+        if (bought) toast.show({ message: `${PLAN_DETAILS[plan].name} is active`, icon: 'check' });
+      } catch (err) {
+        toast.show({ message: errorMessage(err, 'The purchase did not complete.'), tone: 'error' });
+      }
+      return;
+    }
     setBusy(plan);
     try {
       const { url } = await checkout({ plan });
@@ -91,7 +108,7 @@ export function BillingScreen() {
         </View>
         {sub ? (
           <ThemedText type="small" themeColor="textSecondary">
-            ${(sub.priceMonthly / 100).toFixed(0)} / month
+            {sub.store ? `Billed through ${sub.store === 'play_store' ? 'Google Play' : 'the App Store'}` : `$${(sub.priceMonthly / 100).toFixed(0)} / month`}
             {sub.trialEndsAt && sub.status === 'trialing' ? ` · trial ends ${shortDate(sub.trialEndsAt)}` : ''}
             {sub.currentPeriodEnd ? ` · ${sub.cancelAtPeriodEnd ? 'ends' : 'renews'} ${shortDate(sub.currentPeriodEnd)}` : ''}
           </ThemedText>
@@ -116,25 +133,65 @@ export function BillingScreen() {
         </Group>
       ) : null}
 
-      <Group title={live ? 'Change plan' : 'Choose a plan'} footer="Checkout and plan changes are handled by Dodo Payments in your browser. Changes apply to your account as soon as payment completes.">
+      {webBilledInStoreBuild ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          This plan is billed through your Mailmark account on the web, and it can be cancelled here.
+        </ThemedText>
+      ) : (
+      <Group
+        title={live ? 'Change plan' : 'Choose a plan'}
+        footer={
+          store.available
+            ? `Monthly subscriptions through ${storeName}, charged to your ${storeName} account and renewed automatically each month unless cancelled at least 24 hours before the period ends. Manage or cancel them in your ${storeName} account settings.`
+            : 'Checkout and plan changes are handled by Dodo Payments in your browser. Changes apply to your account as soon as payment completes.'
+        }>
+        {store.loadError ? <ListRow title={store.loadError} icon="warning" onPress={() => void store.reload()} /> : null}
         {(Object.keys(PLAN_DETAILS) as PaidPlan[]).map((plan) => {
           const current = live && sub?.plan === plan;
+          const pkg = store.packages[plan];
+          const price = store.available ? pkg?.product.priceString : `$${PLAN_DETAILS[plan].priceMonthly}`;
+          const trial = store.available && !live ? freeTrialLabel(pkg) : undefined;
+          const unavailable = store.available && !pkg;
+          const planBusy = busy === plan || store.busy === plan;
           return (
             <ListRow
               key={plan}
-              title={`${PLAN_DETAILS[plan].name} · $${PLAN_DETAILS[plan].priceMonthly}/mo`}
-              subtitle={PLAN_DETAILS[plan].features.join(' · ')}
+              title={price ? `${PLAN_DETAILS[plan].name} · ${price}/mo` : PLAN_DETAILS[plan].name}
+              subtitle={[trial, ...PLAN_DETAILS[plan].features].filter(Boolean).join(' · ')}
               icon={current ? 'checkCircle' : 'card'}
               iconColor={current ? theme.success : undefined}
-              disabled={current || busy !== null}
-              right={current ? <Badge label="Current" tone="success" /> : busy === plan ? <Icon name="pending" size={14} color={theme.textMuted} /> : undefined}
+              disabled={current || unavailable || busy !== null || store.busy !== null}
+              right={current ? <Badge label="Current" tone="success" /> : planBusy ? <Icon name="pending" size={14} color={theme.textMuted} /> : undefined}
               onPress={current ? undefined : () => choose(plan)}
             />
           );
         })}
       </Group>
+      )}
 
-      {live && sub?.dodoSubscriptionId && !sub.cancelAtPeriodEnd ? (
+      {store.available ? (
+        <Group footer={storeBilled ? undefined : `Bought a plan in ${storeName} before? Restore it here.`}>
+          {storeBilled ? (
+            <ListRow title="Manage subscription" icon="external" onPress={() => void manageSubscriptions()} />
+          ) : null}
+          <ListRow
+            title="Restore purchases"
+            icon="refresh"
+            disabled={store.busy !== null}
+            right={store.busy === 'restore' ? <Icon name="pending" size={14} color={theme.textMuted} /> : undefined}
+            onPress={() =>
+              store
+                .restorePurchases()
+                .then(() => toast.show({ message: 'Purchases restored', icon: 'check' }))
+                .catch((err) => toast.show({ message: errorMessage(err, 'Could not restore purchases.'), tone: 'error' }))
+            }
+          />
+          <ListRow title="Terms of Use" icon="docs" onPress={() => WebBrowser.openBrowserAsync(WebLinks.terms)} />
+          <ListRow title="Privacy Policy" icon="docs" onPress={() => WebBrowser.openBrowserAsync(WebLinks.privacy)} />
+        </Group>
+      ) : null}
+
+      {live && sub?.dodoSubscriptionId && !sub.store && !sub.cancelAtPeriodEnd ? (
         <Button title="Cancel subscription" variant="danger" loading={busy === 'cancel'} onPress={confirmCancel} />
       ) : null}
     </Screen>

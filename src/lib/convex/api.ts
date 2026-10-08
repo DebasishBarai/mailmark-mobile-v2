@@ -8,8 +8,10 @@
  *
  * Rule: every entry is a public function the website itself calls, with the
  * same arguments. Check a new entry against the website's app/ directory
- * before adding it. The one exception is `pushTokens`, which the backend
- * added for the mobile app's push notifications (convex/pushTokens.ts).
+ * before adding it. The exceptions are functions the backend added for the
+ * mobile app: `pushTokens` (convex/pushTokens.ts) for push notifications,
+ * `storeSubscriptions` (convex/storeSubscriptions.ts) for in-app purchases and
+ * `accountDeletion` (convex/accountDeletion.ts) for in-app account deletion.
  */
 
 import { makeFunctionReference, type PaginationOptions, type PaginationResult } from 'convex/server';
@@ -226,6 +228,17 @@ export const api = {
       'subscriptions:createCheckoutSession',
     ),
     cancelViaDodo: action<Empty>('subscriptions:cancelViaDodo'),
+  },
+
+  storeSubscriptions: {
+    // Pulls the caller's App Store / Google Play state from RevenueCat right
+    // after a purchase or restore, so the plan applies without waiting for
+    // RevenueCat's webhook.
+    syncMine: action<Empty>('storeSubscriptions:syncMine'),
+  },
+
+  accountDeletion: {
+    deleteMyAccount: action<Empty>('accountDeletion:deleteMyAccount'),
   },
 
   apiKeys: {
