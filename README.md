@@ -20,6 +20,8 @@ Built with Expo SDK 57, Expo Router native tabs and React Native 0.86.
 - **Native**: new-mail and bounce notifications with actions, deep links, app lock with Face
   ID / fingerprint, share sheet, haptics, offline awareness.
 
+To ship to the App Store and Google Play, follow [docs/RELEASE.md](docs/RELEASE.md).
+
 See [docs/FEATURE_MAP.md](docs/FEATURE_MAP.md) for how each website feature
 maps to the app and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it is
 built.

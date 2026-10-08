@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "dev.mailmark.app",
-      "supportsTablet": true,
+      "supportsTablet": false,
+      "usesAppleSignIn": true,
       "associatedDomains": [
         "applinks:www.mailmark.dev"
       ],
@@ -20,6 +21,9 @@
     "android": {
       "package": "dev.mailmark.app",
       "googleServicesFile": "./google-services.json",
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#ce3a1b",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -92,7 +96,8 @@
         "expo-image-picker",
         {
           "photosPermission": "Allow Mailmark to attach photos and videos to your emails.",
-          "cameraPermission": "Allow Mailmark to take photos to attach to your emails."
+          "cameraPermission": "Allow Mailmark to take photos to attach to your emails.",
+          "microphonePermission": false
         }
       ],
       [
@@ -101,6 +106,7 @@
           "faceIDPermission": "Allow Mailmark to use Face ID to unlock the app."
         }
       ],
+      "expo-apple-authentication",
       "expo-web-browser",
       "expo-font",
       "expo-image",

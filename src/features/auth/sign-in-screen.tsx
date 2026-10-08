@@ -1,7 +1,9 @@
 import { useSSO } from '@clerk/expo';
+import { useSignInWithApple } from '@clerk/expo/apple';
 import { useHostedAuth } from '@clerk/expo/hosted-auth';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -10,7 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Button, Icon, type IconName } from '@/components/ui';
 import { Radius, Spacing } from '@/constants/theme';
 import { useSession } from '@/features/auth/session';
-import { useTheme } from '@/hooks/use-theme';
+import { useColorSchemeName, useTheme } from '@/hooks/use-theme';
 import { WebLinks } from '@/lib/config';
 import { errorMessage } from '@/lib/convex/errors';
 import { haptic } from '@/lib/haptics';
@@ -18,7 +20,7 @@ import { haptic } from '@/lib/haptics';
 // Completes a pending auth session when the browser redirects back to the app.
 WebBrowser.maybeCompleteAuthSession();
 
-type Busy = 'sign-in' | 'sign-up' | 'google' | null;
+type Busy = 'sign-in' | 'sign-up' | 'google' | 'apple' | null;
 
 const HIGHLIGHTS: { icon: IconName; title: string; body: string }[] = [
   { icon: 'inbox', title: 'Every mailbox, one inbox', body: 'Read, reply and triage mail for all your domains.' },
@@ -32,15 +34,26 @@ const HIGHLIGHTS: { icon: IconName; title: string; body: string }[] = [
  * codes and MFA run in Clerk's hosted Account Portal inside a system auth
  * session (ASWebAuthenticationSession / Custom Tabs), which shares the OS
  * password manager and passkeys and never exposes credentials to the app.
+ *
+ * On iOS, Sign in with Apple sits next to Google: App Review (guideline 4.8)
+ * rejects an app that offers a third-party login without it.
  */
 export function SignInScreen() {
   const theme = useTheme();
+  const scheme = useColorSchemeName();
   const insets = useSafeAreaInsets();
   const { expired } = useSession();
   const { startHostedAuth } = useHostedAuth();
   const { startSSOFlow } = useSSO();
+  const { startAppleAuthenticationFlow } = useSignInWithApple();
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    AppleAuthentication.isAvailableAsync().then(setAppleAvailable, () => setAppleAvailable(false));
+  }, []);
 
   const run = async (kind: Exclude<Busy, null>) => {
     setBusy(kind);
@@ -50,14 +63,18 @@ export function SignInScreen() {
       if (kind === 'google') {
         const { createdSessionId, setActive } = await startSSOFlow({ strategy: 'oauth_google' });
         if (createdSessionId && setActive) await setActive({ session: createdSessionId });
+      } else if (kind === 'apple') {
+        // A cancelled Apple sheet resolves with no session rather than throwing.
+        const { createdSessionId, setActive } = await startAppleAuthenticationFlow();
+        if (createdSessionId && setActive) await setActive({ session: createdSessionId });
       } else {
         await startHostedAuth({ mode: kind });
       }
     } catch (err) {
       haptic('error');
       setError(
-        kind === 'google'
-          ? `${errorMessage(err, 'Google sign-in did not complete.')} You can also use Sign in.`
+        kind === 'google' || kind === 'apple'
+          ? `${errorMessage(err, `${kind === 'google' ? 'Google' : 'Apple'} sign-in did not complete.`)} You can also use Sign in.`
           : errorMessage(err, 'Sign-in did not complete. Please try again.'),
       );
     } finally {
@@ -124,6 +141,23 @@ export function SignInScreen() {
           disabled={busy !== null && busy !== 'sign-in'}
           onPress={() => run('sign-in')}
         />
+        {appleAvailable ? (
+          <View
+            style={[styles.apple, busy !== null && styles.dimmed]}
+            pointerEvents={busy !== null ? 'none' : 'auto'}>
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+              buttonStyle={
+                scheme === 'dark'
+                  ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                  : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+              }
+              cornerRadius={Radius.md}
+              style={styles.apple}
+              onPress={() => run('apple')}
+            />
+          </View>
+        ) : null}
         <Button
           title="Continue with Google"
           variant="secondary"
@@ -194,5 +228,13 @@ const styles = StyleSheet.create({
   },
   flex: {
     flex: 1,
+  },
+  // The same height as a size="lg" Button.
+  apple: {
+    width: '100%',
+    height: 52,
+  },
+  dimmed: {
+    opacity: 0.5,
   },
 });
