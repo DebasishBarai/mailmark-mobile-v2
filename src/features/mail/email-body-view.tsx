@@ -1,3 +1,4 @@
+import { randomUUID } from 'expo-crypto';
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
@@ -23,7 +24,12 @@ export type EmailBodyViewProps = {
 export function EmailBodyView({ html, blockRemoteImages, mailboxId }: EmailBodyViewProps) {
   const theme = useTheme();
   const [height, setHeight] = useState(120);
-  const source = useMemo(() => ({ html: emailDocument(html, { blockRemoteImages }) }), [html, blockRemoteImages]);
+  const source = useMemo(
+    // A fresh nonce per document, so only the reader's own measuring script
+    // can run; a message cannot know it to smuggle in a script of its own.
+    () => ({ html: emailDocument(html, { blockRemoteImages, measureNonce: randomUUID().replace(/-/g, '') }) }),
+    [html, blockRemoteImages],
+  );
 
   const onNavigate = (request: WebViewNavigation) => {
     // The document itself loads as about:blank / data:; anything else is a
