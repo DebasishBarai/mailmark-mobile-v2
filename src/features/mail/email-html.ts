@@ -4,14 +4,23 @@
  * Mail is authored for a white page, so it is always shown on one, whatever
  * the app theme. The web view reports the app's dark mode to the page, so a
  * message's own dark-mode rules (light text, meant for a dark background)
- * are switched off, or they would paint white-on-white. Scripts are forbidden
- * by CSP (the reader measures height from the native side, which CSP does not
- * govern). With `blockRemoteImages` only inline and embedded images load,
- * which also stops tracking pixels.
+ * are switched off, or they would paint white-on-white. The message's own
+ * scripts are forbidden by CSP. With `measureNonce` the reader's measuring
+ * script (MEASURE_SCRIPT) is the one script allowed to run: it is inlined so
+ * it starts with the page instead of after every remote image has loaded,
+ * which is when the native side's injected scripts run on Android. With
+ * `blockRemoteImages` only inline and embedded images load, which also stops
+ * tracking pixels.
  */
-export function emailDocument(html: string, options: { blockRemoteImages?: boolean } = {}): string {
+export function emailDocument(
+  html: string,
+  options: { blockRemoteImages?: boolean; measureNonce?: string } = {},
+): string {
+  const nonce = options.measureNonce && /^[A-Za-z0-9]+$/.test(options.measureNonce) ? options.measureNonce : null;
   const imgSrc = options.blockRemoteImages ? "img-src data: cid: blob:" : 'img-src * data: cid: blob:';
-  const csp = `default-src 'none'; style-src 'unsafe-inline' *; font-src * data:; ${imgSrc}; media-src *; script-src 'none'`;
+  const scriptSrc = nonce ? `script-src 'nonce-${nonce}'` : "script-src 'none'";
+  const csp = `default-src 'none'; style-src 'unsafe-inline' *; font-src * data:; ${imgSrc}; media-src *; ${scriptSrc}`;
+  const measure = nonce ? `\n<script nonce="${nonce}">${MEASURE_SCRIPT}</script>` : '';
   const isHtml = /<\s*(html|body|div|p|table|br|span|a|img)\b/i.test(html);
   const content = isHtml ? withoutDarkMode(html) : `<pre style="white-space:pre-wrap;font-family:inherit">${html}</pre>`;
   return `<!doctype html>
@@ -24,14 +33,16 @@ export function emailDocument(html: string, options: { blockRemoteImages?: boole
 <style>
   :root { color-scheme: light only; }
   html, body { margin: 0; padding: 0; background: #ffffff; color: #1a1a1a; }
-  body { font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  /* flow-root keeps floats and margins inside the body, so its box is the
+     message's full height. */
+  body { display: flow-root; font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
          padding: 16px; word-wrap: break-word; overflow-wrap: anywhere; -webkit-text-size-adjust: 100%; }
   img { max-width: 100% !important; height: auto; }
   table { max-width: 100% !important; }
   pre, code { white-space: pre-wrap; }
   blockquote { margin: 0 0 0 .8ex; border-left: 2px solid #ccc; padding-left: 1ex; color: #555; }
   a { color: #1a5fb4; }
-</style>
+</style>${measure}
 </head>
 <body>${content}</body>
 </html>`;
@@ -49,20 +60,68 @@ function withoutDarkMode(html: string): string {
     .replace(/(\smedia\s*=\s*)("[^"]*"|'[^']*')/gi, (_, attr, value) => attr + neutralize(value));
 }
 
-/** Injected into the native web view to report the rendered height. */
+/**
+ * Sizes the reader to the message. Mail is often laid out for a fixed width
+ * (a 600px newsletter, a 394px Instagram digest) wider than a phone, so a
+ * message wider than the view is scaled down to fit, as mail apps do; then
+ * the body's height, which can shrink as well as grow, is posted to the
+ * native side. It runs inlined in the page (see `emailDocument`) and again
+ * as the web view's injected script, which only re-measures if it already
+ * ran.
+ */
 export const MEASURE_SCRIPT = `
 (function () {
-  function post() {
-    var h = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
-    window.ReactNativeWebView.postMessage(String(h));
+  if (window.__mailmarkMeasure) { window.__mailmarkMeasure(); return; }
+  var last = 0;
+  var queued = false;
+  function fit() {
+    var body = document.body;
+    var root = document.documentElement;
+    if (!body) return;
+    body.style.zoom = '';
+    var view = root.clientWidth;
+    var content = Math.max(root.scrollWidth, body.scrollWidth);
+    if (view > 0 && content > view + 1) {
+      body.style.zoom = String(Math.max(0.25, Math.floor((view / content) * 1000) / 1000));
+    }
   }
-  post();
-  window.addEventListener('load', post);
-  if (window.ResizeObserver) new ResizeObserver(post).observe(document.body);
-  var imgs = document.images;
-  for (var i = 0; i < imgs.length; i++) imgs[i].addEventListener('load', post);
-  setTimeout(post, 300);
-  setTimeout(post, 1200);
+  function post() {
+    queued = false;
+    var body = document.body;
+    var bridge = window.ReactNativeWebView;
+    if (!body || !bridge) return;
+    var h = Math.ceil(body.getBoundingClientRect().height);
+    if (h > 0 && h !== last) {
+      last = h;
+      bridge.postMessage(String(h));
+    }
+  }
+  function schedule() {
+    if (queued) return;
+    queued = true;
+    (window.requestAnimationFrame || setTimeout)(post);
+  }
+  function update() {
+    fit();
+    schedule();
+  }
+  window.__mailmarkMeasure = function () {
+    last = 0;
+    update();
+  };
+  function start() {
+    update();
+    if (window.ResizeObserver) new ResizeObserver(schedule).observe(document.body);
+    // Images (and anything else) finishing late can change the layout.
+    document.addEventListener('load', update, true);
+    window.addEventListener('load', update);
+    window.addEventListener('resize', update);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(update);
+    setTimeout(update, 300);
+    setTimeout(update, 1200);
+  }
+  if (document.body) start();
+  else document.addEventListener('DOMContentLoaded', start);
 })();
 true;
 `;
