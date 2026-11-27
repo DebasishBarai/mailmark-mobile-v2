@@ -89,6 +89,10 @@ export const api = {
       'mailboxes:updateDisplayName',
     ),
     updateSignature: mutation<{ mailboxId: Id<'mailboxes'>; signature: string }>('mailboxes:updateSignature'),
+    /** `image` is a base64 data URL (PNG, JPEG, WebP or GIF, under 1 MB), or null to remove. */
+    setAvatar: action<{ mailboxId: Id<'mailboxes'>; image: string | null }, number>('mailboxes:setAvatar'),
+    /** Sets or removes the profile image of every mailbox on the domain. Returns how many changed. */
+    setDomainAvatar: action<{ domainId: Id<'domains'>; image: string | null }, number>('mailboxes:setDomainAvatar'),
   },
 
   emails: {

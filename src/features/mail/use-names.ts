@@ -1,9 +1,25 @@
 import { useMemo } from 'react';
 
+import { useWorkspace } from '@/features/workspace/workspace';
 import { api } from '@/lib/convex/api';
 import { useLiveQuery } from '@/lib/convex/hooks';
 import type { Email } from '@/lib/convex/types';
 import type { NameMaps } from '@/lib/email/address';
+
+/** Profile images of the user's own mailboxes, by lower-case address, so a
+ *  message sent from one of them shows its image rather than initials. */
+export function useOwnAvatars(): Map<string, string> {
+  const { mailboxes } = useWorkspace();
+  return useMemo(
+    () =>
+      new Map(
+        (mailboxes.data ?? [])
+          .filter((m) => m.avatarUrl)
+          .map((m) => [m.fullAddress.toLowerCase(), m.avatarUrl as string] as [string, string]),
+      ),
+    [mailboxes.data],
+  );
+}
 
 /**
  * Display names for the addresses on screen: the user's own mailbox names,

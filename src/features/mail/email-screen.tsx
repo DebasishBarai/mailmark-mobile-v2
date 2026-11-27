@@ -24,7 +24,7 @@ import { queueMailChange, usePendingChanges, withPending } from './pending-chang
 import { useEmailActions } from './use-email-actions';
 import { useEmail, type EmailLocation } from './use-email';
 import { useEmailBody } from './use-email-body';
-import { useNameMaps } from './use-names';
+import { useNameMaps, useOwnAvatars } from './use-names';
 
 export function EmailScreen({ id, location }: { id: string; location: EmailLocation }) {
   const { key, refresh } = useRefreshKey();
@@ -56,6 +56,7 @@ function Reader({ email }: { email: Email }) {
   const actions = useEmailActions();
   const body = useEmailBody(email);
   const names = useNameMaps([email]);
+  const ownAvatars = useOwnAvatars();
   const conversation = useConversation(email);
   const marked = useRef(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -143,7 +144,7 @@ function Reader({ email }: { email: Email }) {
               setShowDetails((v) => !v);
             }}
             style={styles.sender}>
-            <Avatar name={displayName(email.from, names)} size={44} />
+            <Avatar name={displayName(email.from, names)} size={44} imageUrl={ownAvatars.get(rawEmail(email.from).toLowerCase())} />
             <View style={styles.flex}>
               <View style={styles.senderLine}>
                 <ThemedText type="bodyStrong" numberOfLines={1} style={styles.flex}>

@@ -13,6 +13,7 @@ import { listDate } from '@/lib/format';
 
 import { cachedConversation, rememberConversation } from './email-cache';
 import { openEmail } from './use-email';
+import { useOwnAvatars } from './use-names';
 
 const WINDOW = 100;
 
@@ -55,6 +56,7 @@ export function useConversation(email: Email | null | undefined): { messages: Em
 
 export function ConversationList({ current, messages, loading, names }: { current: Email; messages: Email[]; loading: boolean; names: NameMaps }) {
   const theme = useTheme();
+  const ownAvatars = useOwnAvatars();
   if (loading) {
     return (
       <View style={styles.list}>
@@ -90,7 +92,7 @@ export function ConversationList({ current, messages, loading, names }: { curren
                 marginRight: outgoing ? 0 : Spacing.five,
               },
             ]}>
-            <Avatar name={displayName(m.from, names)} size={28} />
+            <Avatar name={displayName(m.from, names)} size={28} imageUrl={ownAvatars.get(rawEmail(m.from).toLowerCase())} />
             <View style={styles.text}>
               <View style={styles.line}>
                 <ThemedText type="smallStrong" numberOfLines={1} style={styles.flex}>

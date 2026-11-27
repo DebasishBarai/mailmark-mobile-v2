@@ -1,6 +1,6 @@
 import { router, Stack } from 'expo-router';
 
-import { Badge, EmptyState, ErrorState, Group, IconButton, ListRow, ListSkeleton, Screen } from '@/components/ui';
+import { Avatar, Badge, EmptyState, ErrorState, Group, IconButton, ListRow, ListSkeleton, Screen } from '@/components/ui';
 import { useWorkspace } from '@/features/workspace/workspace';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/convex/api';
@@ -46,7 +46,7 @@ export function MailboxesScreen() {
                     key={m._id}
                     title={m.displayName || m.address}
                     subtitle={m.fullAddress}
-                    icon="at"
+                    left={<Avatar name={m.displayName || m.address} size={32} imageUrl={m.avatarUrl} />}
                     right={unreadByMailbox[m._id] ? <Badge label={`${unreadByMailbox[m._id]} unread`} tone="accent" /> : undefined}
                     onPress={() => router.push(`/mailbox-settings/${m._id}`)}
                   />

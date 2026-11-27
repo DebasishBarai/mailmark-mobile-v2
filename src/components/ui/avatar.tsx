@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -19,9 +20,23 @@ function tintFor(name: string) {
   return TINTS[hash % TINTS.length];
 }
 
-export function Avatar({ name, size = 40 }: { name: string; size?: number }) {
+/** Initials on a colour tile, or the picture at `imageUrl` when there is one
+ *  (a mailbox's profile image). */
+export function Avatar({ name, size = 40, imageUrl }: { name: string; size?: number; imageUrl?: string | null }) {
   const theme = useTheme();
   const tint = tintFor(name);
+
+  if (imageUrl) {
+    return (
+      <Image
+        source={{ uri: imageUrl }}
+        contentFit="cover"
+        transition={120}
+        accessibilityIgnoresInvertColors
+        style={[styles.avatar, { width: size, height: size, borderRadius: size >= 40 ? Radius.md : Radius.sm, borderColor: theme.border }]}
+      />
+    );
+  }
 
   return (
     <View
