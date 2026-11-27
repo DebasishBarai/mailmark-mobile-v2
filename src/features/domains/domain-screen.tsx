@@ -8,8 +8,9 @@ import { Alert, Pressable, Share, StyleSheet, View } from 'react-native';
 import { useActionSheet } from '@/components/feedback/action-sheet';
 import { useToast } from '@/components/feedback/toast';
 import { ThemedText } from '@/components/themed-text';
-import { Badge, Button, Card, ErrorState, Group, Icon, IconButton, ListRow, LoadingState, ProgressBar, Screen } from '@/components/ui';
+import { Avatar, Badge, Button, Card, ErrorState, Group, Icon, IconButton, ListRow, LoadingState, ProgressBar, Screen } from '@/components/ui';
 import { Radius, Spacing } from '@/constants/theme';
+import { AVATAR_NOTE, pickAvatarImage } from '@/features/mailboxes/pick-avatar';
 import { useWorkspace } from '@/features/workspace/workspace';
 import { useTheme } from '@/hooks/use-theme';
 import { WebLinks } from '@/lib/config';
@@ -41,6 +42,8 @@ function DomainDetail({ domain, refreshing, onRefresh }: { domain: DomainWithReg
   const retryMailFrom = useAction(api.domains.retryMailFromVerification);
   const removeDomain = useAction(api.domains.remove);
   const updateDisplayName = useMutation(api.mailboxes.updateDisplayName);
+  const setDomainAvatar = useAction(api.mailboxes.setDomainAvatar);
+  const [avatarBusy, setAvatarBusy] = useState(false);
   const { mailboxes } = useWorkspace();
   const [busy, setBusy] = useState<'verify' | 'retry' | 'remove' | null>(null);
 
@@ -113,6 +116,37 @@ function DomainDetail({ domain, refreshing, onRefresh }: { domain: DomainWithReg
         { label: 'Copy as zone file', icon: 'copy', onPress: () => copy(zoneFile(domain.domain, records), 'Zone file') },
         { label: 'Share zone file', icon: 'share', onPress: () => void Share.share({ title: `${domain.domain} DNS`, message: zoneFile(domain.domain, records) }) },
         { label: 'Setup guide', icon: 'docs', onPress: () => void WebBrowser.openBrowserAsync(WebLinks.domainSetup) },
+      ],
+    });
+
+  // One profile image for every mailbox on the domain.
+  const applyAvatar = async (remove: boolean) => {
+    setAvatarBusy(true);
+    try {
+      const image = remove ? null : await pickAvatarImage();
+      if (!remove && image === null) return; // picker cancelled
+      const count = await setDomainAvatar({ domainId: domain._id, image });
+      haptic('success');
+      toast.show({
+        message: `${remove ? 'Removed the profile image from' : 'Profile image set on'} ${count} mailbox${count === 1 ? '' : 'es'}`,
+        icon: 'check',
+      });
+    } catch (err) {
+      toast.show({ message: errorMessage(err), tone: 'error' });
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const chooseDomainAvatar = () =>
+    sheet.show({
+      title: 'Profile image for all mailboxes',
+      message: `Replaces the profile image on all ${domainMailboxes.length} mailbox${domainMailboxes.length === 1 ? '' : 'es'} on ${domain.domain}. You can still change one mailbox afterwards. ${AVATAR_NOTE}`,
+      options: [
+        { label: 'Choose image', icon: 'photo', onPress: () => void applyAvatar(false) },
+        ...(domainMailboxes.some((m) => m.avatarUrl)
+          ? [{ label: 'Remove from all', icon: 'trash' as const, destructive: true, onPress: () => void applyAvatar(true) }]
+          : []),
       ],
     });
 
@@ -222,11 +256,19 @@ function DomainDetail({ domain, refreshing, onRefresh }: { domain: DomainWithReg
             key={m._id}
             title={m.fullAddress}
             subtitle={m.displayName || 'No display name'}
-            icon="at"
+            left={<Avatar name={m.displayName || m.address} size={32} imageUrl={m.avatarUrl} />}
             onPress={() => router.push(`/mailbox-settings/${m._id}`)}
             onLongPress={() => editName(m._id, m.displayName)}
           />
         ))}
+        {domainMailboxes.length > 0 ? (
+          <ListRow
+            title={avatarBusy ? 'Saving...' : 'Profile image for all mailboxes'}
+            icon="photo"
+            disabled={avatarBusy}
+            onPress={chooseDomainAvatar}
+          />
+        ) : null}
       </Group>
 
       <Group title="Danger zone">

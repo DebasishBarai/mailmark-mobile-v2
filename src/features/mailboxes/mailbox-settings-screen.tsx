@@ -1,4 +1,4 @@
-import { useMutation } from 'convex/react';
+import { useAction, useMutation } from 'convex/react';
 import { Stack, router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -6,7 +6,7 @@ import { StyleSheet, View } from 'react-native';
 import { useActionSheet } from '@/components/feedback/action-sheet';
 import { useToast } from '@/components/feedback/toast';
 import { ThemedText } from '@/components/themed-text';
-import { Badge, Button, ErrorState, Field, Group, ListRow, LoadingState, ProgressBar, Screen } from '@/components/ui';
+import { Avatar, Badge, Button, ErrorState, Field, Group, ListRow, LoadingState, ProgressBar, Screen } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { SEQUENCE_STATUS } from '@/features/campaigns/sequence-card';
 import { useWorkspace } from '@/features/workspace/workspace';
@@ -16,6 +16,8 @@ import { errorMessage } from '@/lib/convex/errors';
 import { useLiveQuery } from '@/lib/convex/hooks';
 import type { Id, Mailbox, WarmupSpeed } from '@/lib/convex/types';
 import { haptic } from '@/lib/haptics';
+
+import { AVATAR_NOTE, pickAvatarImage } from './pick-avatar';
 
 export function MailboxSettingsScreen({ id }: { id: string }) {
   const mailbox = useLiveQuery(api.mailboxes.getById, { mailboxId: id as Id<'mailboxes'> });
@@ -31,6 +33,8 @@ function Settings({ mailbox }: { mailbox: Mailbox }) {
   const sheet = useActionSheet();
   const { selectMailbox, setFolder, domainFor, unreadByMailbox } = useWorkspace();
   const updateName = useMutation(api.mailboxes.updateDisplayName);
+  const setAvatar = useAction(api.mailboxes.setAvatar);
+  const [avatarBusy, setAvatarBusy] = useState(false);
   const startWarmup = useMutation(api.warmup.startWarmup);
   const groups = useLiveQuery(api.senderGroups.list, { mailboxId: mailbox._id });
   const sequences = useLiveQuery(api.sequences.getByMailbox, { mailboxId: mailbox._id });
@@ -54,6 +58,22 @@ function Settings({ mailbox }: { mailbox: Mailbox }) {
       toast.show({ message: errorMessage(err), tone: 'error' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // image undefined: let the user pick one; null: remove the current one.
+  const changeAvatar = async (image?: null) => {
+    setAvatarBusy(true);
+    try {
+      const picked = image === null ? null : await pickAvatarImage();
+      if (picked === null && image !== null) return; // picker cancelled
+      await setAvatar({ mailboxId: mailbox._id, image: picked });
+      haptic('success');
+      toast.show({ message: picked ? 'Profile image saved' : 'Profile image removed', icon: 'check' });
+    } catch (err) {
+      toast.show({ message: errorMessage(err), tone: 'error' });
+    } finally {
+      setAvatarBusy(false);
     }
   };
 
@@ -98,6 +118,18 @@ function Settings({ mailbox }: { mailbox: Mailbox }) {
         <Field label="Display name" value={name} onChangeText={setName} placeholder="e.g. Ada from Acme" hint="Shown to recipients as the sender's name." returnKeyType="done" onSubmitEditing={dirty ? saveName : undefined} />
         {dirty ? <Button title="Save display name" size="sm" loading={saving} onPress={saveName} /> : null}
       </View>
+
+      <Group title="Profile image" footer={AVATAR_NOTE}>
+        <ListRow
+          title={avatarBusy ? 'Saving...' : mailbox.avatarUrl ? 'Change profile image' : 'Add a profile image'}
+          left={<Avatar name={mailbox.displayName || mailbox.address} size={36} imageUrl={mailbox.avatarUrl} />}
+          disabled={avatarBusy}
+          onPress={() => void changeAvatar()}
+        />
+        {mailbox.avatarUrl ? (
+          <ListRow title="Remove profile image" icon="trash" destructive showChevron={false} disabled={avatarBusy} onPress={() => void changeAvatar(null)} />
+        ) : null}
+      </Group>
 
       <Group title="Signature">
         <ListRow

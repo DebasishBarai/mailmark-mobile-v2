@@ -67,6 +67,10 @@ export type Mailbox = SystemFields<'mailboxes'> & {
   fullAddress: string;
   displayName?: string;
   signature?: string;
+  /** Profile image file in Convex storage, shared by every mailbox it was applied to at once. */
+  avatarStorageId?: Id<'_storage'>;
+  /** URL of the profile image, or null when the mailbox has none. */
+  avatarUrl?: string | null;
 };
 
 export type DeliveryStatus = 'pending' | 'delivered' | 'failed' | 'bounced' | 'complained' | 'blocked';
